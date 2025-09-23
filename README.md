@@ -20,14 +20,6 @@ Multi‑agent AI system for product categorization, attribute extraction, tag ge
 
 ---
 
-## 📸 Screenshots (placeholders)
-> Add your own images or GIFs under `docs/` and update paths below.
-
-![Frontend](docs/screenshot_frontend.png)
-![API Docs](docs/screenshot_docs.png)
-
----
-
 ## 🚀 Quick Start
 ```bash
 python3 -m venv venv
@@ -180,6 +172,11 @@ Plan & results: `EVALUATION.md`
 
 ## 👥 Contributors
 - List your team members and roles here.
+
+---
+
+## 📜 License
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
 ---
 
