@@ -6,6 +6,7 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from pathlib import Path
+from .routes import router as agent_router
 
 
 app = FastAPI(title="Product Categorization AI API")
@@ -114,5 +115,8 @@ def health():
 def suggest_products(q: str = Query(..., min_length=1), top_n: int = 5):
     results = engine.suggest(q, top_n=top_n)
     return {"query": q, "results": results}
+
+# Mount agent routes
+app.include_router(agent_router)
 
 
