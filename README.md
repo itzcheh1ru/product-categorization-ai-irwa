@@ -171,7 +171,10 @@ Plan & results: `EVALUATION.md`
 ---
 
 ## 👥 Contributors
-- List your team members and roles here.
+- IT23186156 — Amaya
+- IT23186224 — Sadeepa
+- IT23426344 — Shehan
+- IT23426580 — Hirusha
 
 ---
 
