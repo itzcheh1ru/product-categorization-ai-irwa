@@ -171,10 +171,10 @@ Plan & results: `EVALUATION.md`
 ---
 
 ## 👥 Contributors
-- IT23186156 — Amaya
-- IT23186224 — Sadeepa
-- IT23426344 — Shehan
-- IT23426580 — Hirusha
+- Amaya — [github.com/amaya-6](https://github.com/amaya-6)
+- Sadeepa — [github.com/SadeepaMadushani](https://github.com/SadeepaMadushani)
+- Shehan — [github.com/ShehanUD](https://github.com/ShehanUD)
+- Hirusha — [github.com/itzcheh1ru](https://github.com/itzcheh1ru)
 
 ---
 
