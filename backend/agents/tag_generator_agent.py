@@ -1,130 +1,105 @@
-'''*from typing import Dict, Any, List
+
+
+from typing import Dict, Any, List, Optional
 import logging
-from ..core.llm_integration import LLMIntegration
-from ..core.nlp_processor import NLPProcessor
+import re
+import json
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 class TagGeneratorAgent:
-    def __init__(self):
-        self.llm = LLMIntegration()
-        self.nlp = NLPProcessor()
+    """
+    Agent responsible for generating relevant tags for products.
+    Uses both LLM and NLP approaches to create comprehensive product tags.
+    """
     
-    def generate_tags(self, product_data: Dict[str, Any], attributes: Dict[str, Any] = None) -> Dict[str, Any]:
+    def __init__(self, llm_client=None, nlp_processor=None):
+        """
+        Initialize the TagGeneratorAgent.
+        
+        Args:
+            llm_client: Optional LLM client for generating tags
+            nlp_processor: Optional NLP processor for text analysis
+        """
+        self.llm = llm_client
+        self.nlp = nlp_processor
+        self.logger = logging.getLogger(__name__)
+    
+    def generate_tags(self, product_data: Dict[str, Any], attributes: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Generate relevant tags for a product using both LLM and NLP approaches.
+        
+        Args:
+            product_data: Dictionary containing product information
+            attributes: Optional extracted attributes from other agents
+            
+        Returns:
+            Dictionary containing generated tags with confidence scores
+        """
         try:
+            self.logger.info("Starting tag generation process")
+            
+            # Extract basic product information
             product_name = product_data.get('productDisplayName', '')
             base_color = product_data.get('baseColour', '')
             usage = product_data.get('usage', '')
+            article_type = product_data.get('articleType', '')
+            season = product_data.get('season', '')
             
-            # Prepare prompt for LLM
-            prompt = f"""
-            Generate relevant tags for the following product:
+            # Generate tags using different methods
+            all_tags = []
             
-            Product: {product_name}
-            Base Color: {base_color}
-            Usage: {usage}
+            # 1. Generate LLM-based tags if LLM client is available
+            if self.llm:
+                llm_tags = self._generate_llm_tags(product_name, base_color, usage, article_type, season, attributes)
+                all_tags.extend(llm_tags)
             
-            Extracted Attributes: {attributes if attributes else 'No attributes provided'}
+            # 2. Generate NLP-based tags if NLP processor is available
+            if self.nlp:
+                nlp_tags = self._generate_nlp_tags(product_name, attributes)
+                all_tags.extend(nlp_tags)
             
-            Generate 5-10 relevant tags that would help customers find this product.
-            Include tags for:
-            - Product type
-            - Color
-            - Style
-            - Occasion
-            - Material (if known)
-            - Season
+            # 3. Generate rule-based tags
+            rule_tags = self._generate_rule_based_tags(product_data, attributes)
+            all_tags.extend(rule_tags)
             
-            Respond with a JSON object containing a list of tags with confidence scores.
-            """
+            # 4. Deduplicate and sort tags
+            unique_tags = self._deduplicate_tags(all_tags)
             
-            response_format = {
-                "tags": [
-                    {"tag": "string", "confidence": "float"}
-                ]
+            # 5. Limit to top 10 tags
+            final_tags = sorted(unique_tags, key=lambda x: x.get('confidence', 0), reverse=True)[:10]
+            
+            result = {
+                "tags": final_tags,
+                "generation_timestamp": datetime.now().isoformat(),
+                "total_generated": len(all_tags),
+                "final_count": len(final_tags)
             }
             
-            result = self.llm.generate_structured_response(prompt, response_format)
-            
-            # Also generate tags using NLP
-            nlp_tags = self.generate_nlp_tags(product_name, attributes)
-            if nlp_tags:
-                if 'tags' not in result:
-                    result['tags'] = []
-                result['tags'].extend(nlp_tags)
-            
-            # Deduplicate and sort by confidence
-            if 'tags' in result:
-                seen = set()
-                unique_tags = []
-                for tag_obj in result['tags']:
-                    tag_name = tag_obj['tag'].lower().strip()
-                    if tag_name not in seen:
-                        seen.add(tag_name)
-                        unique_tags.append(tag_obj)
-                result['tags'] = sorted(unique_tags, key=lambda x: x.get('confidence', 0), reverse=True)[:10]
-            
+            self.logger.info(f"Generated {len(final_tags)} unique tags")
             return result
             
         except Exception as e:
-            logger.error(f"Error in tag generation: {e}")
-            return {"error": str(e), "tags": []}
+            self.logger.error(f"Error in tag generation: {e}")
+            return {
+                "tags": [],
+                "error": str(e),
+                "generation_timestamp": datetime.now().isoformat()
+            }
     
-    def generate_nlp_tags(self, product_name: str, attributes: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-        tags = []
-        
-        # Extract nouns and adjectives
-        nouns = self.nlp.extract_nouns(product_name)
-        adjectives = self.nlp.extract_adjectives(product_name)
-        
-        for noun in nouns:
-            tags.append({"tag": noun, "confidence": 0.7, "source": "NLP"})
-        
-        for adj in adjectives:
-            tags.append({"tag": adj, "confidence": 0.6, "source": "NLP"})
-        
-        # Add attribute values as tags
-        if attributes:
-            for attr_name, attr_value in attributes.items():
-                if isinstance(attr_value, dict) and 'value' in attr_value:
-                    tag_value = attr_value['value']
-                    if tag_value and tag_value not in ["", "Not specified", "Unknown"]:
-                        tags.append({
-                            "tag": tag_value, 
-                            "confidence": attr_value.get('confidence', 0.5) * 0.8,
-                            "source": "attribute"
-                        })
-        
-        return tags
-        '''
-
-
-from typing import Dict, Any, List
-import logging
-import re
-from ..core.llm_integration import LLMIntegration
-from ..core.nlp_processor import NLPProcessor
-
-logger = logging.getLogger(__name__)
-
-class TagGeneratorAgent:
-    def __init__(self):
-        self.llm = LLMIntegration()
-        self.nlp = NLPProcessor()
-    
-    def generate_tags(self, product_data: Dict[str, Any], attributes: Dict[str, Any] = None) -> Dict[str, Any]:
+    def _generate_llm_tags(self, product_name: str, base_color: str, usage: str, 
+                          article_type: str, season: str, attributes: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Generate tags using LLM if available."""
         try:
-            product_name = product_data.get('productDisplayName', '')
-            base_color = product_data.get('baseColour', '')
-            usage = product_data.get('usage', '')
-            
-            # Prepare prompt for LLM
             prompt = f"""
             Generate specific, descriptive tags for this product:
 
             PRODUCT: {product_name}
             BASE COLOR: {base_color}
             USAGE: {usage}
+            ARTICLE TYPE: {article_type}
+            SEASON: {season}
 
             Create 5-10 specific tags that describe this product accurately.
             Examples of good tags: "cotton-tshirt", "red-dress", "winter-boots", "formal-shirt"
@@ -141,44 +116,100 @@ class TagGeneratorAgent:
             
             result = self.llm.generate_structured_response(prompt, response_format)
             
-            # Also generate tags using NLP
-            nlp_tags = self.generate_nlp_tags(product_name, attributes)
-            
-            # Combine and deduplicate tags
-            all_tags = []
-            
-            # Add LLM tags
+            tags = []
             if 'tags' in result and isinstance(result['tags'], list):
                 for tag_obj in result['tags']:
                     if isinstance(tag_obj, dict) and 'tag' in tag_obj:
                         tag_text = self.clean_tag(tag_obj['tag'])
                         if tag_text:
-                            all_tags.append({
+                            tags.append({
                                 "tag": tag_text,
                                 "confidence": float(tag_obj.get('confidence', 0.7)),
                                 "source": "llm"
                             })
-            
-            # Add NLP tags
-            all_tags.extend(nlp_tags)
-            
-            # Deduplicate and sort by confidence
-            seen = set()
-            unique_tags = []
-            for tag_obj in all_tags:
-                tag_name = tag_obj['tag'].lower().strip()
-                if tag_name not in seen and tag_name:
-                    seen.add(tag_name)
-                    unique_tags.append(tag_obj)
-            
-            # Limit to top 10 tags
-            result['tags'] = sorted(unique_tags, key=lambda x: x.get('confidence', 0), reverse=True)[:10]
-            
-            return result
+            return tags
             
         except Exception as e:
-            logger.error(f"Error in tag generation: {e}")
-            return {"tags": []}
+            self.logger.warning(f"LLM tag generation failed: {e}")
+            return []
+    
+    def _generate_nlp_tags(self, product_name: str, attributes: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Generate tags using NLP if available."""
+        try:
+            tags = []
+            
+            # Extract nouns and adjectives from product name
+            nouns = self.nlp.extract_nouns(product_name)
+            adjectives = self.nlp.extract_adjectives(product_name)
+            
+            for noun in nouns:
+                clean_noun = self.clean_tag(noun)
+                if clean_noun:
+                    tags.append({"tag": clean_noun, "confidence": 0.7, "source": "nlp"})
+            
+            for adj in adjectives:
+                clean_adj = self.clean_tag(adj)
+                if clean_adj:
+                    tags.append({"tag": clean_adj, "confidence": 0.6, "source": "nlp"})
+            
+            # Add attribute values as tags
+            if attributes:
+                for attr_name, attr_value in attributes.items():
+                    if isinstance(attr_value, dict) and 'value' in attr_value:
+                        tag_value = attr_value['value']
+                        if tag_value and tag_value not in ["", "Unknown", "Not specified"]:
+                            clean_tag = self.clean_tag(tag_value)
+                            if clean_tag:
+                                tags.append({
+                                    "tag": clean_tag, 
+                                    "confidence": attr_value.get('confidence', 0.5) * 0.8,
+                                    "source": "attribute"
+                                })
+            
+            return tags
+            
+        except Exception as e:
+            self.logger.warning(f"NLP tag generation failed: {e}")
+            return []
+    
+    def _generate_rule_based_tags(self, product_data: Dict[str, Any], attributes: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Generate tags using rule-based approach."""
+        tags = []
+        
+        # Color-based tags
+        base_color = product_data.get('baseColour', '').lower()
+        if base_color and base_color not in ['', 'unknown', 'not specified']:
+            tags.append({"tag": f"{base_color}-color", "confidence": 0.8, "source": "rule"})
+        
+        # Season-based tags
+        season = product_data.get('season', '').lower()
+        if season and season not in ['', 'unknown', 'not specified']:
+            tags.append({"tag": f"{season}-season", "confidence": 0.7, "source": "rule"})
+        
+        # Usage-based tags
+        usage = product_data.get('usage', '').lower()
+        if usage and usage not in ['', 'unknown', 'not specified']:
+            tags.append({"tag": f"{usage}-wear", "confidence": 0.6, "source": "rule"})
+        
+        # Article type tags
+        article_type = product_data.get('articleType', '').lower()
+        if article_type and article_type not in ['', 'unknown', 'not specified']:
+            tags.append({"tag": article_type, "confidence": 0.9, "source": "rule"})
+        
+        return tags
+    
+    def _deduplicate_tags(self, tags: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Remove duplicate tags and keep the highest confidence version."""
+        seen = set()
+        unique_tags = []
+        
+        for tag_obj in tags:
+            tag_name = tag_obj['tag'].lower().strip()
+            if tag_name not in seen and tag_name:
+                seen.add(tag_name)
+                unique_tags.append(tag_obj)
+        
+        return unique_tags
     
     def clean_tag(self, tag: str) -> str:
         """Clean and format tag text"""
@@ -199,35 +230,3 @@ class TagGeneratorAgent:
         
         return tag if tag and tag != '-' else ""
     
-    def generate_nlp_tags(self, product_name: str, attributes: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-        tags = []
-        
-        # Extract nouns and adjectives from product name
-        nouns = self.nlp.extract_nouns(product_name)
-        adjectives = self.nlp.extract_adjectives(product_name)
-        
-        for noun in nouns:
-            clean_noun = self.clean_tag(noun)
-            if clean_noun:
-                tags.append({"tag": clean_noun, "confidence": 0.7, "source": "nlp"})
-        
-        for adj in adjectives:
-            clean_adj = self.clean_tag(adj)
-            if clean_adj:
-                tags.append({"tag": clean_adj, "confidence": 0.6, "source": "nlp"})
-        
-        # Add attribute values as tags
-        if attributes:
-            for attr_name, attr_value in attributes.items():
-                if isinstance(attr_value, dict) and 'value' in attr_value:
-                    tag_value = attr_value['value']
-                    if tag_value and tag_value not in ["", "Unknown", "Not specified"]:
-                        clean_tag = self.clean_tag(tag_value)
-                        if clean_tag:
-                            tags.append({
-                                "tag": clean_tag, 
-                                "confidence": attr_value.get('confidence', 0.5) * 0.8,
-                                "source": "attribute"
-                            })
-        
-        return tags
