@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Depends, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -6,6 +6,7 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from pathlib import Path
+import os
 from .routes import router as agent_router
 
 
@@ -106,6 +107,12 @@ class _SearchEngine:
 engine = _SearchEngine()
 
 
+def verify_api_key(x_api_key: str | None = Header(default=None)):
+    required = os.getenv("API_KEY")
+    if required and x_api_key != required:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
@@ -117,6 +124,6 @@ def suggest_products(q: str = Query(..., min_length=1), top_n: int = 5):
     return {"query": q, "results": results}
 
 # Mount agent routes
-app.include_router(agent_router)
+app.include_router(agent_router, dependencies=[Depends(verify_api_key)])
 
 
