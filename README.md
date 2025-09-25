@@ -176,6 +176,15 @@ Plan & results: `EVALUATION.md`
 - Shehan — [github.com/ShehanUD](https://github.com/ShehanUD)
 - Hirusha — [github.com/itzcheh1ru](https://github.com/itzcheh1ru)
 
+### 📋 Detailed Contributions
+
+| Member   | Branch                   | Agent                        | Core                                 | Utils             | API
+|----------|--------------------------|------------------------------|--------------------------------------|-------------------|------------------
+| Shehan   | IT23426344-Shehan        | orchestrator_agent.py         | llm_integration.py                   | helpers.py        | main.py
+| Amaya    | IT23186156-Amaya         | category_classifier_agent.py  | nlp_processor.py                     | validators.py     | routes.py
+| Sadeepa  | IT23186224-Sadeepa       | attribute_extractor_agent.py  | communication.py, information_retrieval.py | config_loader.py | schemas.py
+| Hirusha  | IT23426580-Hirusha       | tag_generator_agent.py        | security.py, models/                 | remaining utils   | remaining API files
+
 ---
 
 ## 📜 License
