@@ -47,6 +47,7 @@ def process_product_description(description: str):
 def get_recommended_products(query_text: str, df: pd.DataFrame, top_n: int = 5):
     """
     Get recommended products using the API search endpoint for better accuracy.
+    Returns categorized results: exact_matches and other_recommendations.
     Falls back to local search if API is unavailable.
     """
     try:
@@ -55,30 +56,47 @@ def get_recommended_products(query_text: str, df: pd.DataFrame, top_n: int = 5):
             "q": query_text,
             "top_n": top_n
         })
-        
+
         if response.status_code == 200:
             api_results = response.json()
-            results = api_results.get("results", [])
+            exact_matches = api_results.get("exact_matches", [])
+            other_recommendations = api_results.get("other_recommendations", [])
+
+            # Convert API results to DataFrame format
+            result_data = []
             
-            if results:
-                # Convert API results to DataFrame format
-                result_data = []
-                for result in results:
-                    result_data.append({
-                        "productDisplayName": result.get("productDisplayName", ""),
-                        "articleType": result.get("articleType", ""),
-                        "baseColour": result.get("baseColour", ""),
-                        "usage": result.get("usage", ""),
-                        "gender": result.get("gender", ""),
-                        "score": result.get("score", 0.0),
-                        "filename": result.get("filename", ""),
-                        "link": result.get("link", "")
-                    })
-                
-                return pd.DataFrame(result_data)
+            # Add exact matches first
+            for result in exact_matches:
+                result_data.append({
+                    "productDisplayName": result.get("productDisplayName", ""),
+                    "articleType": result.get("articleType", ""),
+                    "baseColour": result.get("baseColour", ""),
+                    "usage": result.get("usage", ""),
+                    "gender": result.get("gender", ""),
+                    "score": result.get("score", 0.0),
+                    "filename": result.get("filename", ""),
+                    "link": result.get("link", ""),
+                    "match_type": "exact"
+                })
+
+            # Add other recommendations
+            for result in other_recommendations:
+                result_data.append({
+                    "productDisplayName": result.get("productDisplayName", ""),
+                    "articleType": result.get("articleType", ""),
+                    "baseColour": result.get("baseColour", ""),
+                    "usage": result.get("usage", ""),
+                    "gender": result.get("gender", ""),
+                    "score": result.get("score", 0.0),
+                    "filename": result.get("filename", ""),
+                    "link": result.get("link", ""),
+                    "match_type": "related"
+                })
+
+            return pd.DataFrame(result_data)
     except Exception as e:
         print(f"API search failed, falling back to local search: {e}")
-    
+
     # Fallback to local search if API fails
     if df.empty:
         return df
@@ -106,4 +124,6 @@ def get_recommended_products(query_text: str, df: pd.DataFrame, top_n: int = 5):
 
     # Get top N products
     top_indices = sim_scores.argsort()[::-1][:top_n]
-    return df.iloc[top_indices]
+    result_df = df.iloc[top_indices].copy()
+    result_df['match_type'] = 'related'  # Default to related for fallback
+    return result_df
