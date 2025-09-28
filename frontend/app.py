@@ -338,23 +338,43 @@ def customer_ai_search_page():
             st.success("Found matching products! (from cache)")
             recommended_df = st.session_state[cache_key]
         else:
-            # Skip all heavy processing for instant response
-            summary_text = description
+            # Prefer backend API search for performance
+            with st.spinner("Finding products..."):
+                try:
+                    api_url = f"{API_BASE_URL}/search/suggest?q={requests.utils.quote(description)}&top_n=6"
+                    api_resp = requests.get(api_url, timeout=4)
+                    if api_resp.ok:
+                        payload = api_resp.json()
+                        # Convert API results to DataFrame compatible with existing rendering
+                        exact = payload.get("exact_matches", [])
+                        other = payload.get("other_recommendations", [])
+                        rows = []
+                        for item in exact + other:
+                            rows.append({
+                                "productDisplayName": item.get("productDisplayName"),
+                                "articleType": item.get("articleType"),
+                                "usage": item.get("usage"),
+                                "baseColour": item.get("baseColour"),
+                                "gender": item.get("gender"),
+                                "filename": item.get("filename"),
+                                "link": item.get("link"),
+                                "match_type": item.get("match_type", "related")
+                            })
+                        recommended_df = pd.DataFrame(rows)
+                    else:
+                        recommended_df = pd.DataFrame()
+                except Exception:
+                    recommended_df = pd.DataFrame()
 
-            st.session_state.product_data = summary_text
-            st.success("Found matching products!")
+            if recommended_df.empty:
+                # Fallback to local computation only if needed
+                df = load_product_data()
+                recommended_df = get_recommended_products(description, df, top_n=6)
 
-            # Display summary
-            st.subheader("📝 Customer Request Summary")
-            st.write(summary_text)
-
-            # Load products and get recommendations using ORIGINAL query for better accuracy
-            df = load_product_data()
-            
-            recommended_df = get_recommended_products(description, df, top_n=2)  # Minimal results for speed
-            
-            # Cache the results
             st.session_state[cache_key] = recommended_df
+            st.success("Found matching products!")
+            st.subheader("📝 Customer Request Summary")
+            st.write(description)
 
         if recommended_df.empty:
             st.info("No recommended products found.")
@@ -893,6 +913,130 @@ def render_admin_view():
         admin_analytics_page()
     elif st.session_state.admin_page == 'settings':
         admin_settings_page()
+    elif st.session_state.admin_page == 'add_product':
+        admin_add_product_page()
+
+
+def admin_add_product_page():
+    """Dark-mode friendly 'Add New Product' form (auto-extract attributes from description)."""
+    st.title("➕ Add New Product")
+
+    # Minimal inputs with watermark-style placeholders
+    name = st.text_input("Product Name*", placeholder="e.g., Nike Men Black T-shirt")
+    description = st.text_area(
+        "Product Description*",
+        placeholder=(
+            "Describe the product (color, gender, category, subcategory, brand, usage, type).\n"
+            "Example: 'Men black cotton Tshirt by Nike for casual wear, apparel/topwear.'"
+        ),
+        height=120,
+    )
+    image_url = st.text_input("Image URL", placeholder="https://.../image.jpg (optional)")
+
+    def _extract_attributes(text: str) -> dict:
+        text_l = (text or "").lower()
+        # Colors
+        colors = [
+            "black","white","blue","navy","red","green","yellow","purple","pink","brown","grey","gray","orange","beige","maroon","gold","silver"
+        ]
+        base_colour = next((c for c in colors if c in text_l), None)
+
+        # Gender
+        if any(w in text_l for w in ["men","male","boy"]):
+            gender = "Men"
+        elif any(w in text_l for w in ["women","female","girl","lady"]):
+            gender = "Women"
+        else:
+            gender = None
+
+        # Category/Subcategory/Type
+        type_map = {
+            "tshirt":"Tshirts","t-shirt":"Tshirts","shirt":"Shirts","jean":"Jeans","dress":"Dresses",
+            "kurta":"Kurtas","watch":"Watches","shoe":"Shoes","saree":"Sarees","bag":"Bags",
+            "ring":"Rings","necklace":"Necklaces","bracelet":"Bracelets","earring":"Earrings"
+        }
+        article_type = next((v for k,v in type_map.items() if k in text_l), None)
+        # category guess
+        cat_map = {
+            "apparel":["tshirt","t-shirt","shirt","jean","dress","kurta","saree"],
+            "accessories":["watch","bag","ring","necklace","bracelet","earring"],
+            "footwear":["shoe","sneaker"]
+        }
+        master_category = None
+        for cat, keys in cat_map.items():
+            if any(k in text_l for k in keys):
+                master_category = cat.title()
+                break
+        # subcategory guess
+        if article_type in ["Tshirts","Shirts","Kurtas","Dresses","Sarees"]:
+            sub_category = "Topwear"
+        elif article_type in ["Jeans"]:
+            sub_category = "Bottomwear"
+        elif article_type in ["Watches","Bags","Rings","Necklaces","Bracelets","Earrings"]:
+            sub_category = article_type
+        else:
+            sub_category = None
+
+        # Usage
+        if "casual" in text_l:
+            usage = "Casual"
+        elif "formal" in text_l or "office" in text_l:
+            usage = "Formal"
+        elif "sport" in text_l or "gym" in text_l:
+            usage = "Sports"
+        else:
+            usage = None
+
+        # Brand (simple heuristic: capitalized token before type/near 'by')
+        brand = None
+        if " by " in text_l:
+            brand = text.split(" by ")[-1].split()[0].strip().title()
+
+        return {
+            "articleType": article_type,
+            "usage": usage,
+            "baseColour": base_colour.title() if base_colour else None,
+            "gender": gender,
+            "masterCategory": master_category,
+            "subCategory": sub_category,
+            "brand": brand,
+        }
+
+    if st.button("Add Product with AI Categorization", type="primary"):
+        if not name or not description:
+            st.warning("Product name and description are required")
+            return
+        # Use heuristic extraction (orchestrator endpoint not available)
+        extracted = {}
+        # Merge with heuristic extraction as fallback
+        heur = _extract_attributes(description)
+        for k,v in heur.items():
+            if not extracted.get(k):
+                extracted[k] = v
+
+        # Derive filename from image URL
+        filename = None
+        if image_url and image_url.strip():
+            try:
+                filename = image_url.strip().split("/")[-1].split("?")[0]
+            except Exception:
+                filename = None
+
+        payload = {
+            "productDisplayName": name,
+            **{k:v for k,v in extracted.items() if v},
+            "filename": filename,
+            "link": image_url or None,
+        }
+        try:
+            resp = requests.post(f"{API_BASE_URL}/mongodb/products", json=payload, timeout=8)
+            if resp.ok:
+                data = resp.json()
+                st.success(f"✅ Product added! ID: {data.get('product_id')}")
+            else:
+                st.error(f"❌ Failed to add product: {resp.text}")
+        except Exception as e:
+            st.error(f"❌ Error contacting API: {e}")
 
 def main():
     """Main application"""
@@ -924,7 +1068,7 @@ def main():
             st.session_state.current_page = 'admin_dashboard'
             # Admin sub-navigation
             st.markdown("### Admin Pages")
-            admin_pages = ["Dashboard", "Products", "Analytics", "Settings"]
+            admin_pages = ["Dashboard", "Products", "Analytics", "Settings", "Add Product"]
             selected_admin_page = st.radio("Go to", admin_pages, key="admin_nav")
             
             if selected_admin_page == "Dashboard":
@@ -935,25 +1079,53 @@ def main():
                 st.session_state.admin_page = 'analytics'
             elif selected_admin_page == "Settings":
                 st.session_state.admin_page = 'settings'
+            elif selected_admin_page == "Add Product":
+                st.session_state.admin_page = 'add_product'
         
         st.markdown("---")
         st.write("**API Status:**")
         try:
-            health = requests.get(f"{API_BASE_URL}/health", timeout=5).json()
-            st.success("✅ API Connected")
-            st.caption(f"Model: {health.get('model', 'Unknown')}")
-        except:
+            resp = requests.get(f"{API_BASE_URL}/health", timeout=5)
+            if resp.status_code == 200:
+                try:
+                    health = resp.json()
+                except Exception:
+                    health = {}
+                st.success("✅ API Connected")
+                st.caption(f"Model: {health.get('model', 'Unknown')}")
+            else:
+                st.error("❌ API Offline")
+                st.info("Running in demo mode with sample data")
+        except Exception:
             st.error("❌ API Offline")
             st.info("Running in demo mode with sample data")
         
         # Data status
         st.write("**Data Status:**")
         try:
-            df = load_product_data()
-            st.success(f"✅ Loaded {len(df)} products")
-            st.caption(f"Categories: {df['masterCategory'].nunique()}")
-        except:
-            st.error("❌ Data load failed")
+            # Prefer backend MongoDB stats to avoid CSV fallback/demo mode
+            stats_resp = requests.get(f"{API_BASE_URL}/mongodb/stats", timeout=5)
+            if stats_resp.status_code == 200:
+                stats_json = {}
+                try:
+                    stats_json = stats_resp.json()
+                except Exception:
+                    stats_json = {}
+                db_stats = stats_json.get("database_stats", {})
+                total_products = db_stats.get("total_products")
+                categories = db_stats.get("categories")
+                if isinstance(total_products, int):
+                    st.success(f"✅ Loaded {total_products} products (MongoDB)")
+                    if isinstance(categories, int):
+                        st.caption(f"Categories: {categories}")
+                else:
+                    # Fallback display without forcing CSV demo
+                    st.info("ℹ️ Connected, but stats unavailable")
+            else:
+                st.info("ℹ️ Backend reachable, but stats endpoint returned non-200")
+        except Exception:
+            # Last resort: do not trigger CSV demo here; simply show offline
+            st.error("❌ Data status unavailable")
         
         st.markdown("---")
         st.caption(f"© {datetime.now().year} Product AI System")
