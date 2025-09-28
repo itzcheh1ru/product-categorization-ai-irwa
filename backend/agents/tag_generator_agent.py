@@ -204,7 +204,7 @@ class TagGeneratorAgent:
         unique_tags = []
         
         for tag_obj in tags:
-            tag_name = tag_obj['tag'].lower().strip()
+            tag_name = (tag_obj.get('tag', '') or '').lower().strip()
             if tag_name not in seen and tag_name:
                 seen.add(tag_name)
                 unique_tags.append(tag_obj)
@@ -217,7 +217,7 @@ class TagGeneratorAgent:
             return ""
         
         # Remove generic words
-        tag = tag.lower().strip()
+        tag = (tag or '').lower().strip()
         generic_words = ['product', 'type', 'color', 'style', 'occasion', 'material', 'season']
         
         for word in generic_words:
@@ -225,7 +225,7 @@ class TagGeneratorAgent:
         
         # Clean up and format
         tag = re.sub(r'[^\w\s-]', '', tag)  # Remove special chars
-        tag = re.sub(r'\s+', '-', tag.strip())  # Replace spaces with hyphens
+        tag = re.sub(r'\s+', '-', (tag or '').strip())  # Replace spaces with hyphens
         tag = re.sub(r'-+', '-', tag)  # Remove multiple hyphens
         
         return tag if tag and tag != '-' else ""

@@ -1,5 +1,7 @@
 from typing import Dict, Any
 import logging
+import pandas as pd
+from pathlib import Path
 from ..core.llm_integration import LLMIntegration
 from ..core.nlp_processor import NLPProcessor
 from ..core.information_retrieval import InformationRetrieval
@@ -10,8 +12,37 @@ class CategoryClassifierAgent:
     def __init__(self):
         self.llm = LLMIntegration()
         self.nlp = NLPProcessor()
-        self.ir = InformationRetrieval()
         self.categories = ["Apparel", "Accessories", "Footwear", "Personal Care", "Free Items"]
+        
+        # Initialize InformationRetrieval with product data
+        self.ir = self._initialize_information_retrieval()
+    
+    def _initialize_information_retrieval(self):
+        """Initialize InformationRetrieval with product data from CSV."""
+        try:
+            # Load product data
+            data_path = Path(__file__).resolve().parents[2] / "data" / "cleaned_product_data.csv"
+            if not data_path.exists():
+                data_path = Path(__file__).resolve().parents[2] / "data" / "product.csv"
+            
+            if data_path.exists():
+                # Use shared instance for better performance
+                ir = InformationRetrieval.get_shared_instance(str(data_path))
+                
+                # If the shared instance doesn't have data, load it
+                if not ir.product_database:
+                    df = pd.read_csv(data_path)
+                    product_data = df.to_dict('records')
+                    ir.product_database = product_data
+                    ir.build_index()
+                
+                return ir
+            else:
+                logger.warning("No product data found for InformationRetrieval")
+                return InformationRetrieval()
+        except Exception as e:
+            logger.error(f"Error initializing InformationRetrieval: {e}")
+            return InformationRetrieval()
     
     def classify_product(self, product_data: Dict[str, Any]) -> Dict[str, Any]:
         try:

@@ -45,6 +45,41 @@ def process_product_description(description: str):
         return None
     
 def get_recommended_products(query_text: str, df: pd.DataFrame, top_n: int = 5):
+    """
+    Get recommended products using the API search endpoint for better accuracy.
+    Falls back to local search if API is unavailable.
+    """
+    try:
+        # Use the API search endpoint for better accuracy
+        response = requests.get(f"{BASE_URL}/search/suggest", params={
+            "q": query_text,
+            "top_n": top_n
+        })
+        
+        if response.status_code == 200:
+            api_results = response.json()
+            results = api_results.get("results", [])
+            
+            if results:
+                # Convert API results to DataFrame format
+                result_data = []
+                for result in results:
+                    result_data.append({
+                        "productDisplayName": result.get("productDisplayName", ""),
+                        "articleType": result.get("articleType", ""),
+                        "baseColour": result.get("baseColour", ""),
+                        "usage": result.get("usage", ""),
+                        "gender": result.get("gender", ""),
+                        "score": result.get("score", 0.0),
+                        "filename": result.get("filename", ""),
+                        "link": result.get("link", "")
+                    })
+                
+                return pd.DataFrame(result_data)
+    except Exception as e:
+        print(f"API search failed, falling back to local search: {e}")
+    
+    # Fallback to local search if API fails
     if df.empty:
         return df
 

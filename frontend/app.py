@@ -328,6 +328,10 @@ def customer_ai_search_page():
             st.warning("Please enter a product description.")
             return
 
+        # Clear any previous search results
+        if 'search_results' in st.session_state:
+            del st.session_state.search_results
+
         with st.spinner("Analyzing your description and finding matching products..."):
             # Step 1: Generate summary using Ollama
             try:
@@ -345,10 +349,11 @@ def customer_ai_search_page():
             st.subheader("📝 Customer Request Summary")
             st.write(summary_text)
 
-            # Load products and get recommendations
+            # Load products and get recommendations using ORIGINAL query for better accuracy
             st.subheader("🎯 Recommended Products")
             df = load_product_data()
-            recommended_df = get_recommended_products(summary_text, df, top_n=3)
+            
+            recommended_df = get_recommended_products(description, df, top_n=3)  # Use original description, not summary
 
             if recommended_df.empty:
                 st.info("No recommended products found.")
@@ -365,10 +370,20 @@ def customer_ai_search_page():
                     details = " | ".join(filter(None, [article_type, colour, usage]))
                     if details:
                         st.write(details)
+                    
+                    # Load image with clean display
                     if link and isinstance(link, str) and link.strip():
-                        st.image(link, width=200)
+                        try:
+                            # Use use_column_width=True for better responsive design
+                            st.image(link, use_column_width=True)
+                        except Exception as e:
+                            # If image fails to load, show a placeholder
+                            st.image("https://via.placeholder.com/300x400?text=Product+Image", use_column_width=True)
+                            st.caption(f"Image unavailable: {filename}")
                     else:
+                        # No image link available
                         st.image("https://via.placeholder.com/300x400?text=No+Image", use_column_width=True)
+                        st.caption("No image available")
                     
                     st.markdown("---")
 
