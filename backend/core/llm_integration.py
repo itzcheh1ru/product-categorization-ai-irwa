@@ -1,5 +1,6 @@
 from typing import Dict, Any, Optional
 import os
+import hashlib
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,8 +14,16 @@ class LLMIntegration:
 
     def __init__(self, model: Optional[str] = None):
         self.model = model or os.getenv("LLM_MODEL", "llama3.1")
+        self._cache = {}  # Simple in-memory cache
 
     def generate_text(self, prompt: str, temperature: float = 0.2) -> str:
+        # Create cache key
+        cache_key = hashlib.md5(f"{prompt}_{temperature}".encode()).hexdigest()
+        
+        # Check cache first
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
         try:
             import ollama  # type: ignore
             response = ollama.chat(
@@ -22,7 +31,11 @@ class LLMIntegration:
                 messages=[{"role": "user", "content": prompt}],
                 options={"temperature": temperature},
             )
-            return response.get("message", {}).get("content", "").strip()
+            result = response.get("message", {}).get("content", "").strip()
+            
+            # Cache the result
+            self._cache[cache_key] = result
+            return result
         except Exception:
             # Fallback if ollama isn't running
             return ""
