@@ -328,19 +328,15 @@ def customer_ai_search_page():
             st.warning("Please enter a product description.")
             return
 
-        # Clear any previous search results
-        if 'search_results' in st.session_state:
-            del st.session_state.search_results
-
-        with st.spinner("Analyzing your description and finding matching products..."):
-            # Step 1: Generate summary using Ollama
-            try:
-                summary_text = generate_summary(description)
-            except Exception:
-                summary_text = description  # fallback
-
-            # Optional backend processing
-            _ = process_product_description(description)
+        # Check cache first for faster response
+        cache_key = f"search_{description}"
+        if cache_key in st.session_state:
+            st.success("Found matching products! (from cache)")
+            recommended_df = st.session_state[cache_key]
+        else:
+            with st.spinner("Finding matching products..."):
+                # Skip LLM processing for faster response
+                summary_text = description  # Use original description directly
 
             st.session_state.product_data = summary_text
             st.success("Found matching products!")
@@ -350,42 +346,96 @@ def customer_ai_search_page():
             st.write(summary_text)
 
             # Load products and get recommendations using ORIGINAL query for better accuracy
-            st.subheader("🎯 Recommended Products")
             df = load_product_data()
             
-            recommended_df = get_recommended_products(description, df, top_n=3)  # Use original description, not summary
+            recommended_df = get_recommended_products(description, df, top_n=3)  # Reduce results for faster display
+            
+            # Cache the results
+            st.session_state[cache_key] = recommended_df
 
-            if recommended_df.empty:
-                st.info("No recommended products found.")
-            else:
-                for idx, row in recommended_df.iterrows():
+        if recommended_df.empty:
+            st.info("No recommended products found.")
+        else:
+            # Separate exact matches and other recommendations
+            exact_matches = recommended_df[recommended_df.get('match_type', 'related') == 'exact']
+            other_recommendations = recommended_df[recommended_df.get('match_type', 'related') == 'related']
+            
+            # Display Exact Matches
+            if not exact_matches.empty:
+                st.subheader("🎯 Exactly Match Your Search")
+                st.markdown("*Products that match both color and type from your search*")
+                
+                for idx, row in exact_matches.iterrows():
                     name = row.get("productDisplayName") or "Unnamed Product"
                     article_type = row.get("articleType") or ""
                     colour = row.get("baseColour") or ""
                     usage = row.get("usage") or ""
                     link = row.get("link") or ""
-                    filename = row.get("filename")  # image filename
+                    filename = row.get("filename") or ""
 
-                    st.markdown(f"**{name}**")
-                    details = " | ".join(filter(None, [article_type, colour, usage]))
-                    if details:
-                        st.write(details)
-                    
-                    # Load image with clean display
-                    if link and isinstance(link, str) and link.strip():
-                        try:
-                            # Use use_column_width=True for better responsive design
-                            st.image(link, use_column_width=True)
-                        except Exception as e:
-                            # If image fails to load, show a placeholder
-                            st.image("https://via.placeholder.com/300x400?text=Product+Image", use_column_width=True)
-                            st.caption(f"Image unavailable: {filename}")
-                    else:
-                        # No image link available
-                        st.image("https://via.placeholder.com/300x400?text=No+Image", use_column_width=True)
-                        st.caption("No image available")
-                    
-                    st.markdown("---")
+                    # Create a container for each product
+                    with st.container():
+                        col1, col2 = st.columns([1, 2])
+                        
+                        with col1:
+                            # Display image
+                            if link and isinstance(link, str) and link.strip():
+                                try:
+                                    st.image(link, use_column_width=True)
+                                except Exception:
+                                    st.image("https://via.placeholder.com/200x250?text=Product+Image", use_column_width=True)
+                            else:
+                                st.image("https://via.placeholder.com/200x250?text=No+Image", use_column_width=True)
+                        
+                        with col2:
+                            st.markdown(f"**{name}**")
+                            details = " | ".join(filter(None, [article_type, colour, usage]))
+                            if details:
+                                st.write(details)
+                            st.success("✅ Exact Match")
+                        
+                        st.markdown("---")
+                
+            # Display Other Recommendations
+            if not other_recommendations.empty:
+                st.subheader("💡 Other Recommendations")
+                st.markdown("*Related products you might also like*")
+                
+                for idx, row in other_recommendations.iterrows():
+                    name = row.get("productDisplayName") or "Unnamed Product"
+                    article_type = row.get("articleType") or ""
+                    colour = row.get("baseColour") or ""
+                    usage = row.get("usage") or ""
+                    link = row.get("link") or ""
+                    filename = row.get("filename") or ""
+
+                    # Create a container for each product
+                    with st.container():
+                        col1, col2 = st.columns([1, 2])
+                        
+                        with col1:
+                            # Display image
+                            if link and isinstance(link, str) and link.strip():
+                                try:
+                                    st.image(link, use_column_width=True)
+                                except Exception:
+                                    st.image("https://via.placeholder.com/200x250?text=Product+Image", use_column_width=True)
+                            else:
+                                st.image("https://via.placeholder.com/200x250?text=No+Image", use_column_width=True)
+                        
+                        with col2:
+                            st.markdown(f"**{name}**")
+                            details = " | ".join(filter(None, [article_type, colour, usage]))
+                            if details:
+                                st.write(details)
+                            st.info("💡 Related Product")
+                        
+                        st.markdown("---")
+            
+            # Summary
+            total_exact = len(exact_matches)
+            total_related = len(other_recommendations)
+            st.info(f"📊 Found {total_exact} exact matches and {total_related} related recommendations")
 
 
 

@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Query, Depends, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -36,11 +36,14 @@ class Suggestion(BaseModel):
     score: float
     filename: Optional[str] = None
     link: Optional[str] = None
+    match_type: Optional[str] = None  # "exact", "partial", "related"
 
 
 class SuggestResponse(BaseModel):
     query: str
-    results: List[Suggestion]
+    exact_matches: List[Suggestion]
+    other_recommendations: List[Suggestion]
+    total_results: int
 
 
 class _SearchEngine:
@@ -49,6 +52,7 @@ class _SearchEngine:
         self.vectorizer: Optional[TfidfVectorizer] = None
         self.matrix = None
         self.text_columns = ["productDisplayName", "articleType", "usage", "baseColour", "gender"]
+        self._initialized = False
 
     def _load_df(self) -> pd.DataFrame:
         if self.df is None:
@@ -56,11 +60,19 @@ class _SearchEngine:
                 # Fallback: try product.csv
                 alt = DATA_PATH.parent / "product.csv"
                 if alt.exists():
-                    self.df = pd.read_csv(alt)
+                    # Load only essential columns for faster startup
+                    self.df = pd.read_csv(alt, usecols=[
+                        'productDisplayName', 'articleType', 'baseColour', 
+                        'usage', 'gender', 'filename', 'link'
+                    ])
                 else:
                     self.df = pd.DataFrame()
             else:
-                self.df = pd.read_csv(DATA_PATH)
+                # Load only essential columns for faster startup
+                self.df = pd.read_csv(DATA_PATH, usecols=[
+                    'productDisplayName', 'articleType', 'baseColour', 
+                    'usage', 'gender', 'filename', 'link'
+                ])
         return self.df
 
     def _build_matrix(self):
@@ -75,23 +87,23 @@ class _SearchEngine:
         product_texts = df[available[0]].fillna("")
         for col in available[1:]:
             product_texts = product_texts + " " + df[col].fillna("")
-        self.vectorizer = TfidfVectorizer(
-            stop_words="english", 
-            ngram_range=(1, 3),  # Include trigrams for better color matching
-            max_features=2000,
-            lowercase=True
-        )
+            self.vectorizer = TfidfVectorizer(
+                stop_words="english",
+                ngram_range=(1, 2),  # Reduce to bigrams for faster processing
+                max_features=1000,   # Reduce features for faster processing
+                lowercase=True
+            )
         self.matrix = self.vectorizer.fit_transform(product_texts)
 
     def ensure_ready(self):
         if self.vectorizer is None or self.matrix is None:
             self._build_matrix()
 
-    def suggest(self, query: str, top_n: int = 5) -> List[Suggestion]:
+    def suggest(self, query: str, top_n: int = 5) -> Dict[str, List[Suggestion]]:
         self.ensure_ready()
         if self.matrix is None or self.matrix.shape[0] == 0:
-            return []
-        
+            return {"exact_matches": [], "other_recommendations": []}
+
         # Preprocess query for better matching
         processed_query = self._preprocess_query(query)
         query_vec = self.vectorizer.transform([processed_query])
@@ -100,25 +112,84 @@ class _SearchEngine:
         # Apply color and type boosting
         sims = self._apply_boosting(query, sims)
         
-        top_idx = sims.argsort()[::-1][:top_n]
+        # Get fewer results for faster processing
+        top_idx = sims.argsort()[::-1][:top_n + 3]  # Get just a few extra results
         df = self._load_df()
-        results: List[Suggestion] = []
+        
+        # Extract colors and product types for categorization
+        colors = self._extract_colors(query)
+        product_types = self._extract_product_types(query)
+        
+        exact_matches: List[Suggestion] = []
+        other_recommendations: List[Suggestion] = []
+        
         for i in top_idx:
             row = df.iloc[i] if not df.empty else {}
-            results.append(
-                Suggestion(
-                    index=int(i),
-                    productDisplayName=(row.get("productDisplayName") if hasattr(row, "get") else None),
-                    articleType=(row.get("articleType") if hasattr(row, "get") else None),
-                    usage=(row.get("usage") if hasattr(row, "get") else None),
-                    baseColour=(row.get("baseColour") if hasattr(row, "get") else None),
-                    gender=(row.get("gender") if hasattr(row, "get") else None),
-                    score=float(sims[i]),
-                    filename=(row.get("filename") if hasattr(row, "get") else None),
-                    link=(row.get("link") if hasattr(row, "get") else None),
-                )
+            
+            # Check if this is an exact match
+            is_exact_match = self._is_exact_match(row, colors, product_types)
+            
+            suggestion = Suggestion(
+                index=int(i),
+                productDisplayName=(row.get("productDisplayName") if hasattr(row, "get") else None),
+                articleType=(row.get("articleType") if hasattr(row, "get") else None),
+                usage=(row.get("usage") if hasattr(row, "get") else None),
+                baseColour=(row.get("baseColour") if hasattr(row, "get") else None),
+                gender=(row.get("gender") if hasattr(row, "get") else None),
+                score=float(sims[i]),
+                filename=(row.get("filename") if hasattr(row, "get") else None),
+                link=(row.get("link") if hasattr(row, "get") else None),
+                match_type="exact" if is_exact_match else "related"
             )
-        return results
+            
+            if is_exact_match and len(exact_matches) < top_n:
+                exact_matches.append(suggestion)
+            elif not is_exact_match and len(other_recommendations) < top_n:
+                other_recommendations.append(suggestion)
+        
+        return {
+            "exact_matches": exact_matches,
+            "other_recommendations": other_recommendations
+        }
+    
+    def _is_exact_match(self, row: pd.Series, colors: List[str], product_types: List[str]) -> bool:
+        """Check if a product is an exact match based on color and product type."""
+        if not colors and not product_types:
+            return False
+            
+        product_text = ' '.join([
+            str(row.get("productDisplayName", "")),
+            str(row.get("articleType", "")),
+            str(row.get("baseColour", "")),
+            str(row.get("usage", ""))
+        ]).lower()
+        
+        color_match = False
+        type_match = False
+        
+        # Check color match
+        if colors:
+            for color in colors:
+                if color in product_text:
+                    color_match = True
+                    break
+        
+        # Check product type match
+        if product_types:
+            for ptype in product_types:
+                if ptype in product_text:
+                    type_match = True
+                    break
+        
+        # Exact match requires both color and type to match (if both are specified)
+        if colors and product_types:
+            return color_match and type_match
+        elif colors:
+            return color_match
+        elif product_types:
+            return type_match
+        
+        return False
     
     def _preprocess_query(self, query: str) -> str:
         """Preprocess search query for better matching."""
@@ -212,19 +283,15 @@ class _SearchEngine:
                             type_match = True
                             break
                 
-                # Apply precision boosting logic
+                # Simplified boosting for faster processing
                 if color_match and type_match:
-                    # Both color and type match - HIGHEST priority
-                    boost_factor *= 5.0  # 400% boost for exact match
+                    boost_factor *= 3.0  # Exact match
                 elif type_match:
-                    # Only type match - HIGH priority
-                    boost_factor *= 2.5  # 150% boost for type match
+                    boost_factor *= 2.0  # Type match
                 elif color_match:
-                    # Only color match - MEDIUM priority
-                    boost_factor *= 1.1  # 10% boost for color match
+                    boost_factor *= 1.2  # Color match
                 else:
-                    # No match - LOWER priority
-                    boost_factor *= 0.1  # Significantly reduce score for no match
+                    boost_factor *= 0.5  # No match
                 
                 boosted_similarities[i] *= boost_factor
                 
@@ -302,8 +369,17 @@ def health():
 
 @app.get("/api/search/suggest", response_model=SuggestResponse)
 def suggest_products(q: str = Query(..., min_length=1), top_n: int = 5):
-    results = engine.suggest(q, top_n=top_n)
-    return {"query": q, "results": results}
+    categorized_results = engine.suggest(q, top_n=top_n)
+    exact_matches = categorized_results["exact_matches"]
+    other_recommendations = categorized_results["other_recommendations"]
+    total_results = len(exact_matches) + len(other_recommendations)
+    
+    return SuggestResponse(
+        query=q, 
+        exact_matches=exact_matches,
+        other_recommendations=other_recommendations,
+        total_results=total_results
+    )
 
 # Mount agent routes
 app.include_router(agent_router, dependencies=[Depends(verify_api_key)])
