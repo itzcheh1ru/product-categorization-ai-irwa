@@ -40,6 +40,11 @@ class MongoDBManager:
             # Test connection
             self.client.admin.command('ping')
             logger.info(f"Successfully connected to MongoDB Atlas - Database: {self.database_name}")
+            # Ensure indexes exist for fast search
+            try:
+                self.create_text_index()
+            except Exception:
+                pass
             return True
             
         except Exception as e:
@@ -114,13 +119,17 @@ class MongoDBManager:
     def search_products(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Search products by text query"""
         try:
-            # Create text search query
+            # Create regex-based search across fields present in our dataset
             search_query = {
                 "$or": [
-                    {"name": {"$regex": query, "$options": "i"}},
-                    {"description": {"$regex": query, "$options": "i"}},
-                    {"category": {"$regex": query, "$options": "i"}},
-                    {"brand": {"$regex": query, "$options": "i"}}
+                    {"productDisplayName": {"$regex": query, "$options": "i"}},
+                    {"articleType": {"$regex": query, "$options": "i"}},
+                    {"usage": {"$regex": query, "$options": "i"}},
+                    {"baseColour": {"$regex": query, "$options": "i"}},
+                    {"gender": {"$regex": query, "$options": "i"}},
+                    {"brand": {"$regex": query, "$options": "i"}},
+                    {"masterCategory": {"$regex": query, "$options": "i"}},
+                    {"subCategory": {"$regex": query, "$options": "i"}}
                 ]
             }
             
@@ -131,6 +140,38 @@ class MongoDBManager:
         except Exception as e:
             logger.error(f"Failed to search products: {e}")
             return []
+
+    def search_products_fast(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Fast text search using MongoDB text index with score and projection.
+
+        Falls back to regex search if text index is unavailable.
+        """
+        try:
+            pipeline = [
+                {"$match": {"$text": {"$search": query}}},
+                {"$addFields": {"score": {"$meta": "textScore"}}},
+                {"$sort": {"score": -1}},
+                {"$project": {
+                    "productDisplayName": 1,
+                    "articleType": 1,
+                    "usage": 1,
+                    "baseColour": 1,
+                    "gender": 1,
+                    "brand": 1,
+                    "masterCategory": 1,
+                    "subCategory": 1,
+                    "filename": 1,
+                    "link": 1,
+                    "score": 1
+                }},
+                {"$limit": int(limit)}
+            ]
+            cursor = self.collection.aggregate(pipeline, allowDiskUse=False, maxTimeMS=2000)
+            products = list(cursor)
+            return products
+        except Exception as e:
+            logger.warning(f"Text search failed or no index, falling back to regex: {e}")
+            return self.search_products(query, limit)
     
     def get_products_by_category(self, category: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Get products by category"""
@@ -153,11 +194,27 @@ class MongoDBManager:
         except Exception as e:
             logger.error(f"Failed to get product by ID: {e}")
             return None
+
+    def add_product(self, product: Dict[str, Any]) -> Optional[str]:
+        """Insert a single product document and return its ID"""
+        try:
+            product = dict(product or {})
+            product.setdefault('created_at', datetime.utcnow())
+            product.setdefault('updated_at', datetime.utcnow())
+            # Normalize field names similar to CSV schema
+            # Expected keys: productDisplayName, articleType, usage, baseColour, gender, masterCategory, subCategory, brand, filename, link
+            result = self.collection.insert_one(product)
+            return str(result.inserted_id)
+        except Exception as e:
+            logger.error(f"Failed to add product: {e}")
+            return None
     
     def get_categories(self) -> List[str]:
         """Get all unique categories"""
         try:
-            categories = self.collection.distinct("category")
+            # Use the field name that exists in the migrated dataset
+            # Original CSV uses 'masterCategory'
+            categories = self.collection.distinct("masterCategory")
             logger.info(f"Found {len(categories)} unique categories")
             return categories
         except Exception as e:
@@ -187,12 +244,16 @@ class MongoDBManager:
     def create_text_index(self):
         """Create text index for better search performance"""
         try:
-            # Create compound text index
+            # Create compound text index on fields we query
             self.collection.create_index([
-                ("name", "text"),
-                ("description", "text"),
-                ("category", "text"),
-                ("brand", "text")
+                ("productDisplayName", "text"),
+                ("articleType", "text"),
+                ("usage", "text"),
+                ("baseColour", "text"),
+                ("gender", "text"),
+                ("brand", "text"),
+                ("masterCategory", "text"),
+                ("subCategory", "text")
             ])
             logger.info("Created text index for product search")
         except Exception as e:

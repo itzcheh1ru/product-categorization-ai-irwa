@@ -8,6 +8,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from pathlib import Path
 import os
+from datetime import datetime
 from core.mongodb_connection import get_mongodb_manager, connect_to_mongodb
 # from .routes import router as agent_router
 
@@ -45,6 +46,19 @@ class SuggestResponse(BaseModel):
     exact_matches: List[Suggestion]
     other_recommendations: List[Suggestion]
     total_results: int
+
+
+class NewProductRequest(BaseModel):
+    productDisplayName: str
+    articleType: Optional[str] = None
+    usage: Optional[str] = None
+    baseColour: Optional[str] = None
+    gender: Optional[str] = None
+    masterCategory: Optional[str] = None
+    subCategory: Optional[str] = None
+    brand: Optional[str] = None
+    filename: Optional[str] = None
+    link: Optional[str] = None
 
 
 class _SearchEngine:
@@ -430,7 +444,12 @@ def verify_api_key(x_api_key: str | None = Header(default=None)):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "model": "Product Categorization AI",
+        "mongodb_connected": engine.mongodb_manager is not None and engine.mongodb_manager.client is not None,
+        "timestamp": datetime.utcnow().isoformat()
+    }
 
 
 @app.get("/api/search/suggest", response_model=SuggestResponse)
@@ -677,6 +696,12 @@ def get_mongodb_stats():
                 return {"error": "Failed to connect to MongoDB"}
         
         stats = mongodb_manager.get_database_stats()
+        # Ensure categories count is computed even if older stats path returns 0
+        if isinstance(stats, dict) and stats.get("categories", 0) in (0, None):
+            try:
+                stats["categories"] = len(mongodb_manager.get_categories())
+            except Exception:
+                pass
         return {
             "status": "success",
             "database_stats": stats,
@@ -695,7 +720,8 @@ def search_mongodb_products(q: str = Query(..., description="Search query"), lim
             if not mongodb_manager.connect():
                 return {"error": "Failed to connect to MongoDB"}
         
-        products = mongodb_manager.search_products(q, limit)
+        # Use fast text search first; falls back internally if needed
+        products = mongodb_manager.search_products_fast(q, limit)
         return {
             "status": "success",
             "query": q,
@@ -706,6 +732,25 @@ def search_mongodb_products(q: str = Query(..., description="Search query"), lim
     except Exception as e:
         logger.error(f"MongoDB search error: {e}")
         return {"error": "MongoDB search failed", "details": str(e)}
+
+
+@app.post("/api/mongodb/products")
+def add_product_endpoint(req: NewProductRequest):
+    """Add a new product to MongoDB"""
+    try:
+        mongodb_manager = get_mongodb_manager()
+        if mongodb_manager.client is None:
+            if not mongodb_manager.connect():
+                raise HTTPException(status_code=500, detail="Failed to connect to MongoDB")
+        product_id = mongodb_manager.add_product(req.model_dump(exclude_none=True))
+        if not product_id:
+            raise HTTPException(status_code=500, detail="Failed to insert product")
+        return {"status": "success", "product_id": product_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Add product error: {e}")
+        return {"error": "Product insert failed", "details": str(e)}
 
 @app.post("/api/responsible-ai/sanitize")
 def sanitize_input_endpoint(request: BiasDetectionRequest):
