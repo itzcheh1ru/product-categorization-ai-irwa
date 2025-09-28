@@ -227,9 +227,13 @@ def display_products(df, category=None, subcategory=None, article_type=None, tag
             with cols[j]:
                 # Product image
                 if 'link' in prod and isinstance(prod['link'], str) and prod['link'].strip():
-                    st.image(prod['link'], width=200)
-                else:
-                    st.image("https://via.placeholder.com/300x400?text=No+Image", use_container_width=True)
+                    if prod.get('link') and prod['link'] != 'undefined' and prod['link'].strip():
+                        try:
+                            st.image(prod['link'], width=200)
+                        except:
+                            st.image("https://via.placeholder.com/200x200?text=No+Image", width=200)
+                    else:
+                        st.image("https://via.placeholder.com/200x200?text=No+Image", width=200)
 
                 # Product title
                 st.markdown(f"**{prod.get('productDisplayName', 'Unnamed Product')}**")
@@ -334,9 +338,8 @@ def customer_ai_search_page():
             st.success("Found matching products! (from cache)")
             recommended_df = st.session_state[cache_key]
         else:
-            with st.spinner("Finding matching products..."):
-                # Skip LLM processing for faster response
-                summary_text = description  # Use original description directly
+            # Skip all heavy processing for instant response
+            summary_text = description
 
             st.session_state.product_data = summary_text
             st.success("Found matching products!")
@@ -348,7 +351,7 @@ def customer_ai_search_page():
             # Load products and get recommendations using ORIGINAL query for better accuracy
             df = load_product_data()
             
-            recommended_df = get_recommended_products(description, df, top_n=3)  # Reduce results for faster display
+            recommended_df = get_recommended_products(description, df, top_n=2)  # Minimal results for speed
             
             # Cache the results
             st.session_state[cache_key] = recommended_df
@@ -485,9 +488,13 @@ def customer_browse_page():
             with cols[j]:
                 # Product image
                 if 'link' in prod and isinstance(prod['link'], str) and prod['link'].strip():
-                    st.image(prod['link'], width=200)
-                else:
-                    st.image("https://via.placeholder.com/300x400?text=No+Image", use_container_width=True)
+                    if prod.get('link') and prod['link'] != 'undefined' and prod['link'].strip():
+                        try:
+                            st.image(prod['link'], width=200)
+                        except:
+                            st.image("https://via.placeholder.com/200x200?text=No+Image", width=200)
+                    else:
+                        st.image("https://via.placeholder.com/200x200?text=No+Image", width=200)
 
                 # Product title
                 st.markdown(f"**{prod.get('productDisplayName', 'Unnamed Product')}**")

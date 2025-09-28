@@ -1,14 +1,14 @@
 from fastapi import FastAPI, Query, Depends, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from pathlib import Path
 import os
-from .routes import router as agent_router
+# from .routes import router as agent_router
 
 
 app = FastAPI(title="Product Categorization AI API")
@@ -381,7 +381,240 @@ def suggest_products(q: str = Query(..., min_length=1), top_n: int = 5):
         total_results=total_results
     )
 
-# Mount agent routes
-app.include_router(agent_router, dependencies=[Depends(verify_api_key)])
+# Mount agent routes - disabled for performance
+# app.include_router(agent_router, dependencies=[Depends(verify_api_key)])
+
+# ==================== RESPONSIBLE AI ENDPOINTS ====================
+
+from core.security import (
+    responsible_ai_manager,
+    enhanced_sanitize_input_with_ai_safety,
+    detect_and_mitigate_bias,
+    assess_data_privacy,
+    generate_ethical_ai_guidelines,
+    validate_ai_model_ethics,
+    create_responsible_ai_policy,
+    log_responsible_ai_event,
+    get_responsible_ai_dashboard_data,
+    BiasType,
+    PrivacyLevel,
+    AISafetyLevel
+)
+
+class BiasDetectionRequest(BaseModel):
+    text: str
+    context: Optional[str] = ""
+
+class PrivacyAssessmentRequest(BaseModel):
+    data: Dict[str, Any]
+    user_id: Optional[str] = None
+
+class AISafetyRequest(BaseModel):
+    content: str
+    context: Optional[str] = ""
+
+class ModelEthicsRequest(BaseModel):
+    model_config = {"protected_namespaces": ()}
+    model_name: str
+    predictions: List[Dict[str, Any]]
+    ground_truth: List[Dict[str, Any]]
+
+@app.post("/api/responsible-ai/detect-bias")
+def detect_bias_endpoint(request: BiasDetectionRequest):
+    """Detect bias in text content"""
+    try:
+        bias_results = responsible_ai_manager.detect_bias(request.text, request.context)
+        
+        # Log the bias detection event
+        log_responsible_ai_event(
+            "bias_detection_request",
+            {
+                "text_length": len(request.text),
+                "bias_count": len(bias_results),
+                "bias_types": [result.bias_type.value for result in bias_results]
+            }
+        )
+        
+        return {
+            "text": request.text,
+            "bias_detected": len(bias_results) > 0,
+            "bias_results": [
+                {
+                    "bias_type": result.bias_type.value,
+                    "confidence": result.confidence,
+                    "severity": result.severity,
+                    "description": result.description,
+                    "mitigation_suggestion": result.mitigation_suggestion,
+                    "detected_patterns": result.detected_patterns
+                }
+                for result in bias_results
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Bias detection error: {e}")
+        return {"error": "Bias detection failed", "details": str(e)}
+
+@app.post("/api/responsible-ai/assess-privacy")
+def assess_privacy_endpoint(request: PrivacyAssessmentRequest):
+    """Assess privacy implications of data processing"""
+    try:
+        processed_data, privacy_log = assess_data_privacy(request.data, request.user_id)
+        
+        # Log the privacy assessment event
+        log_responsible_ai_event(
+            "privacy_assessment",
+            {
+                "data_keys": list(request.data.keys()),
+                "pii_detected": privacy_log.pii_detected,
+                "anonymization_applied": privacy_log.anonymization_applied,
+                "privacy_level": privacy_log.privacy_level.value
+            },
+            request.user_id
+        )
+        
+        return {
+            "original_data": request.data,
+            "processed_data": processed_data,
+            "privacy_assessment": {
+                "privacy_level": privacy_log.privacy_level.value,
+                "pii_detected": privacy_log.pii_detected,
+                "anonymization_applied": privacy_log.anonymization_applied,
+                "retention_period_days": privacy_log.retention_period,
+                "timestamp": privacy_log.timestamp.isoformat()
+            }
+        }
+    except Exception as e:
+        logger.error(f"Privacy assessment error: {e}")
+        return {"error": "Privacy assessment failed", "details": str(e)}
+
+@app.post("/api/responsible-ai/assess-safety")
+def assess_ai_safety_endpoint(request: AISafetyRequest):
+    """Assess AI safety of content"""
+    try:
+        safety_result = responsible_ai_manager.assess_ai_safety(request.content, request.context)
+        
+        # Log the safety assessment event
+        log_responsible_ai_event(
+            "safety_assessment",
+            {
+                "content_length": len(request.content),
+                "safety_level": safety_result.safety_level.value,
+                "risk_factors_count": len(safety_result.risk_factors),
+                "content_flags": safety_result.content_flags
+            }
+        )
+        
+        return {
+            "content": request.content,
+            "safety_assessment": {
+                "safety_level": safety_result.safety_level.value,
+                "confidence": safety_result.confidence,
+                "risk_factors": safety_result.risk_factors,
+                "mitigation_actions": safety_result.mitigation_actions,
+                "content_flags": safety_result.content_flags
+            }
+        }
+    except Exception as e:
+        logger.error(f"AI safety assessment error: {e}")
+        return {"error": "AI safety assessment failed", "details": str(e)}
+
+@app.post("/api/responsible-ai/validate-model-ethics")
+def validate_model_ethics_endpoint(request: ModelEthicsRequest):
+    """Validate AI model ethics and fairness"""
+    try:
+        ethics_report = validate_ai_model_ethics(
+            request.model_name,
+            request.predictions,
+            request.ground_truth
+        )
+        
+        # Log the model ethics validation event
+        log_responsible_ai_event(
+            "model_ethics_validation",
+            {
+                "model_name": request.model_name,
+                "predictions_count": len(request.predictions),
+                "fairness_score": ethics_report["fairness_metrics"]["overall_fairness_score"],
+                "compliance_status": ethics_report["ethical_compliance"]["compliance_status"]
+            }
+        )
+        
+        return ethics_report
+    except Exception as e:
+        logger.error(f"Model ethics validation error: {e}")
+        return {"error": "Model ethics validation failed", "details": str(e)}
+
+@app.get("/api/responsible-ai/guidelines")
+def get_ethical_guidelines():
+    """Get ethical AI guidelines and best practices"""
+    try:
+        guidelines = generate_ethical_ai_guidelines()
+        return guidelines
+    except Exception as e:
+        logger.error(f"Guidelines retrieval error: {e}")
+        return {"error": "Guidelines retrieval failed", "details": str(e)}
+
+@app.get("/api/responsible-ai/policy")
+def get_responsible_ai_policy():
+    """Get Responsible AI policy document"""
+    try:
+        policy = create_responsible_ai_policy()
+        return policy
+    except Exception as e:
+        logger.error(f"Policy retrieval error: {e}")
+        return {"error": "Policy retrieval failed", "details": str(e)}
+
+@app.get("/api/responsible-ai/dashboard")
+def get_responsible_ai_dashboard():
+    """Get Responsible AI dashboard data"""
+    try:
+        dashboard_data = get_responsible_ai_dashboard_data()
+        return dashboard_data
+    except Exception as e:
+        logger.error(f"Dashboard data retrieval error: {e}")
+        return {"error": "Dashboard data retrieval failed", "details": str(e)}
+
+@app.get("/api/responsible-ai/report")
+def get_responsible_ai_report():
+    """Get comprehensive Responsible AI report"""
+    try:
+        report = responsible_ai_manager.generate_responsible_ai_report()
+        return report
+    except Exception as e:
+        logger.error(f"Report generation error: {e}")
+        return {"error": "Report generation failed", "details": str(e)}
+
+@app.post("/api/responsible-ai/sanitize")
+def sanitize_input_endpoint(request: BiasDetectionRequest):
+    """Enhanced input sanitization with AI safety assessment"""
+    try:
+        sanitized, safety_result = enhanced_sanitize_input_with_ai_safety(request.text, request.context)
+        
+        # Log the sanitization event
+        log_responsible_ai_event(
+            "input_sanitization",
+            {
+                "original_length": len(request.text),
+                "sanitized_length": len(sanitized),
+                "safety_level": safety_result.safety_level.value,
+                "content_blocked": safety_result.safety_level == AISafetyLevel.BLOCKED
+            }
+        )
+        
+        return {
+            "original_input": request.text,
+            "sanitized_input": sanitized,
+            "safety_assessment": {
+                "safety_level": safety_result.safety_level.value,
+                "confidence": safety_result.confidence,
+                "risk_factors": safety_result.risk_factors,
+                "mitigation_actions": safety_result.mitigation_actions,
+                "content_flags": safety_result.content_flags
+            },
+            "content_blocked": safety_result.safety_level == AISafetyLevel.BLOCKED
+        }
+    except Exception as e:
+        logger.error(f"Input sanitization error: {e}")
+        return {"error": "Input sanitization failed", "details": str(e)}
 
 
