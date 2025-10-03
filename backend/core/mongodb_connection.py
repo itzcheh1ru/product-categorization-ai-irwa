@@ -266,6 +266,8 @@ class MongoDBManager:
                 return {
                     "total_products": 0,
                     "categories": 0,
+                    "subcategories": 0,
+                    "genders": 0,
                     "brands": 0,
                     "database_name": self.database_name,
                     "collection_name": self.collection_name,
@@ -275,6 +277,8 @@ class MongoDBManager:
             stats = {
                 "total_products": self.get_product_count(),
                 "categories": len(self.get_categories()),
+                "subcategories": len(self.collection.distinct("subCategory")),
+                "genders": len(self.collection.distinct("gender")),
                 "brands": len(self.get_brands()),
                 "database_name": self.database_name,
                 "collection_name": self.collection_name,

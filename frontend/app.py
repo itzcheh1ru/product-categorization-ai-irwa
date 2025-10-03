@@ -695,17 +695,34 @@ def admin_dashboard_page():
     
     df = st.session_state.admin_data
     
+    # Prefer authoritative counts from backend (MongoDB)
+    mongo_total_products = None
+    mongo_categories = None
+    mongo_subcategories = None
+    mongo_genders = None
+    try:
+        stats_resp = requests.get(f"{API_BASE_URL}/mongodb/stats", timeout=5)
+        if stats_resp.status_code == 200:
+            stats_json = stats_resp.json() if stats_resp.content else {}
+            db_stats = stats_json.get("database_stats", {}) if isinstance(stats_json, dict) else {}
+            mongo_total_products = db_stats.get("total_products")
+            mongo_categories = db_stats.get("categories")
+            mongo_subcategories = db_stats.get("subcategories")
+            mongo_genders = db_stats.get("genders")
+    except Exception:
+        pass
+
     # Quick stats
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Total Products", len(df))
+        st.metric("Total Products", mongo_total_products if isinstance(mongo_total_products, int) else len(df))
     with col2:
-        st.metric("Categories", df['masterCategory'].nunique())
+        st.metric("Categories", mongo_categories if isinstance(mongo_categories, int) else df['masterCategory'].nunique())
     with col3:
-        st.metric("Subcategories", df['subCategory'].nunique())
+        st.metric("Subcategories", mongo_subcategories if isinstance(mongo_subcategories, int) else df['subCategory'].nunique())
     with col4:
-        st.metric("Genders", df['gender'].nunique())
+        st.metric("Genders", mongo_genders if isinstance(mongo_genders, int) else df['gender'].nunique())
     
     # Recent activity section
     st.subheader("📊 Quick Actions")
