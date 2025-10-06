@@ -11,7 +11,9 @@ import ollama  # Ensure you have the ollama package installed and configured
 from src.utils.api import process_product_description, get_recommended_products
 
 # Configuration
-API_BASE_URL = "http://localhost:8000/api"  # Update with your FastAPI server URL
+# Prefer environment or Streamlit secrets when available (works on Streamlit Cloud);
+# fall back to localhost for local development.
+API_BASE_URL = os.getenv("API_BASE_URL") or st.secrets.get("API_BASE_URL", "http://localhost:8000/api")
 
 # Resolve data path dynamically (prefer product.csv, fall back to cleaned_product_data.csv)
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
