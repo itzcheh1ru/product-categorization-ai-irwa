@@ -11,9 +11,22 @@ import ollama  # Ensure you have the ollama package installed and configured
 from src.utils.api import process_product_description, get_recommended_products
 
 # Configuration
-# Prefer environment or Streamlit secrets when available (works on Streamlit Cloud);
-# fall back to localhost for local development.
-API_BASE_URL = os.getenv("API_BASE_URL") or st.secrets.get("API_BASE_URL", "http://localhost:8000/api")
+# Prefer Streamlit secrets on Cloud, then environment locally; fallback to localhost.
+def _resolve_api_base_url() -> str:
+    try:
+        secret_url = st.secrets.get("API_BASE_URL") if hasattr(st, "secrets") else None
+    except Exception:
+        secret_url = None
+    env_url = os.getenv("API_BASE_URL")
+    url = (secret_url or env_url or "http://localhost:8000/api").strip()
+    # Normalize to ensure trailing '/api'
+    if url.endswith('/'):
+        url = url[:-1]
+    if not url.endswith('/api'):
+        url = url + '/api'
+    return url
+
+API_BASE_URL = _resolve_api_base_url()
 
 # Resolve data path dynamically (prefer product.csv, fall back to cleaned_product_data.csv)
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
