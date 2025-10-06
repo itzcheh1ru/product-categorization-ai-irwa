@@ -9,7 +9,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 from pathlib import Path
 import os
 from datetime import datetime
-from backend.core.mongodb_connection import get_mongodb_manager, connect_to_mongodb
+try:
+    from backend.core.mongodb_connection import get_mongodb_manager, connect_to_mongodb
+except Exception:  # Support running with working dir at 'backend/'
+    from core.mongodb_connection import get_mongodb_manager, connect_to_mongodb
 # from .routes import router as agent_router
 
 
@@ -471,7 +474,23 @@ def suggest_products(q: str = Query(..., min_length=1), top_n: int = 5):
 
 # ==================== RESPONSIBLE AI ENDPOINTS ====================
 
-from backend.core.security import (
+try:
+    from backend.core.security import (
+        responsible_ai_manager,
+        enhanced_sanitize_input_with_ai_safety,
+        detect_and_mitigate_bias,
+        assess_data_privacy,
+        generate_ethical_ai_guidelines,
+        validate_ai_model_ethics,
+        create_responsible_ai_policy,
+        log_responsible_ai_event,
+        get_responsible_ai_dashboard_data,
+        BiasType,
+        PrivacyLevel,
+        AISafetyLevel
+    )
+except Exception:
+    from core.security import (
     responsible_ai_manager,
     enhanced_sanitize_input_with_ai_safety,
     detect_and_mitigate_bias,

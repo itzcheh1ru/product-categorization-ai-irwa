@@ -13,8 +13,13 @@ from src.utils.api import process_product_description, get_recommended_products
 # Configuration
 # Prefer Streamlit secrets on Cloud, then environment locally; fallback to localhost.
 def _resolve_api_base_url() -> str:
+    # Only read Streamlit secrets if a secrets.toml exists to avoid noisy warnings
+    secret_url = None
     try:
-        secret_url = st.secrets.get("API_BASE_URL") if hasattr(st, "secrets") else None
+        home_secrets = os.path.expanduser("~/.streamlit/secrets.toml")
+        app_secrets = os.path.join(os.path.dirname(__file__), ".streamlit", "secrets.toml")
+        if os.path.exists(home_secrets) or os.path.exists(app_secrets):
+            secret_url = st.secrets.get("API_BASE_URL") if hasattr(st, "secrets") else None
     except Exception:
         secret_url = None
     env_url = os.getenv("API_BASE_URL")
