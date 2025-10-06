@@ -32,6 +32,17 @@ def _resolve_api_base_url() -> str:
     return url
 
 API_BASE_URL = _resolve_api_base_url()
+API_IS_LOCAL_DEFAULT = API_BASE_URL.startswith("http://localhost")
+
+def _get_api_json(endpoint: str, timeout: int = 5):
+    """Small helper to call backend JSON endpoint safely."""
+    try:
+        resp = requests.get(f"{API_BASE_URL}{endpoint}", timeout=timeout)
+        if resp.status_code == 200:
+            return resp.json() if resp.content else {}
+    except Exception:
+        pass
+    return None
 
 # Resolve data path dynamically (prefer product.csv, fall back to cleaned_product_data.csv)
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -1121,47 +1132,28 @@ def main():
         
         st.markdown("---")
         st.write("**API Status:**")
-        try:
-            resp = requests.get(f"{API_BASE_URL}/health", timeout=5)
-            if resp.status_code == 200:
-                try:
-                    health = resp.json()
-                except Exception:
-                    health = {}
-                st.success("✅ API Connected")
-                st.caption(f"Model: {health.get('model', 'Unknown')}")
-            else:
-                st.error("❌ API Offline")
-                st.info("Running in demo mode with sample data")
-        except Exception:
+        health = _get_api_json("/health")
+        if isinstance(health, dict):
+            st.success("✅ API Connected")
+            st.caption(f"Model: {health.get('model', 'Unknown')}")
+        else:
             st.error("❌ API Offline")
             st.info("Running in demo mode with sample data")
         
         # Data status
         st.write("**Data Status:**")
-        try:
-            # Prefer backend MongoDB stats to avoid CSV fallback/demo mode
-            stats_resp = requests.get(f"{API_BASE_URL}/mongodb/stats", timeout=5)
-            if stats_resp.status_code == 200:
-                stats_json = {}
-                try:
-                    stats_json = stats_resp.json()
-                except Exception:
-                    stats_json = {}
-                db_stats = stats_json.get("database_stats", {})
-                total_products = db_stats.get("total_products")
-                categories = db_stats.get("categories")
-                if isinstance(total_products, int):
-                    st.success(f"✅ Loaded {total_products} products (MongoDB)")
-                    if isinstance(categories, int):
-                        st.caption(f"Categories: {categories}")
-                else:
-                    # Fallback display without forcing CSV demo
-                    st.info("ℹ️ Connected, but stats unavailable")
+        stats_json = _get_api_json("/mongodb/stats")
+        if isinstance(stats_json, dict):
+            db_stats = stats_json.get("database_stats", {})
+            total_products = db_stats.get("total_products")
+            categories = db_stats.get("categories")
+            if isinstance(total_products, int):
+                st.success(f"✅ Loaded {total_products} products (MongoDB)")
+                if isinstance(categories, int):
+                    st.caption(f"Categories: {categories}")
             else:
-                st.info("ℹ️ Backend reachable, but stats endpoint returned non-200")
-        except Exception:
-            # Last resort: do not trigger CSV demo here; simply show offline
+                st.info("ℹ️ Connected, but stats unavailable")
+        else:
             st.error("❌ Data status unavailable")
         
         st.markdown("---")
