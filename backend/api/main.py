@@ -8,12 +8,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from pathlib import Path
 import os
-from datetime import datetime
-try:
-    from backend.core.mongodb_connection import get_mongodb_manager, connect_to_mongodb
-except Exception:  # Support running with working dir at 'backend/'
-    from core.mongodb_connection import get_mongodb_manager, connect_to_mongodb
-# from .routes import router as agent_router
+import logging
+ 
+logger = logging.getLogger(__name__)
 
 
 app = FastAPI(title="Product Categorization AI API")
@@ -28,7 +25,7 @@ app.add_middleware(
 )
 
 
-# DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "cleaned_product_data.csv"  # Removed: Using MongoDB now
+DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "cleaned_product_data.csv"
 
 
 class Suggestion(BaseModel):
@@ -51,68 +48,34 @@ class SuggestResponse(BaseModel):
     total_results: int
 
 
-class NewProductRequest(BaseModel):
-    productDisplayName: str
-    articleType: Optional[str] = None
-    usage: Optional[str] = None
-    baseColour: Optional[str] = None
-    gender: Optional[str] = None
-    masterCategory: Optional[str] = None
-    subCategory: Optional[str] = None
-    brand: Optional[str] = None
-    filename: Optional[str] = None
-    link: Optional[str] = None
-
-
 class _SearchEngine:
     def __init__(self):
-        self.mongodb_manager = None
+        self.df: Optional[pd.DataFrame] = None
         self.vectorizer: Optional[TfidfVectorizer] = None
         self.matrix = None
         self.text_columns = ["productDisplayName", "articleType", "usage", "baseColour", "gender"]
         self._initialized = False
-        self._connect_to_mongodb()
-
-    def _connect_to_mongodb(self):
-        """Connect to MongoDB and initialize"""
-        try:
-            if connect_to_mongodb():
-                self.mongodb_manager = get_mongodb_manager()
-                print("✅ Connected to MongoDB successfully")
-            else:
-                print("❌ Failed to connect to MongoDB")
-        except Exception as e:
-            print(f"❌ MongoDB connection error: {e}")
 
     def _load_df(self) -> pd.DataFrame:
-        """Load data from MongoDB instead of CSV"""
-        if self.mongodb_manager is None:
-            return pd.DataFrame()
-        
-        try:
-            # Get products from MongoDB
-            products = self.mongodb_manager.get_all_products()
-            if not products:
-                print("No products found in MongoDB")
-                return pd.DataFrame()
-            
-            # Convert to DataFrame
-            df = pd.DataFrame(products)
-            
-            # Select only essential columns
-            essential_columns = ['productDisplayName', 'articleType', 'baseColour', 
-                               'usage', 'gender', 'filename', 'link']
-            available_columns = [col for col in essential_columns if col in df.columns]
-            
-            if available_columns:
-                df = df[available_columns]
-            
-            print(f"✅ Loaded {len(df)} products from MongoDB")
-            return df
-            
-        except Exception as e:
-            print(f"❌ Error loading data from MongoDB: {e}")
-            return pd.DataFrame()
+        if self.df is None:
+            if not DATA_PATH.exists():
+                # Fallback: try product.csv
+                alt = DATA_PATH.parent / "product.csv"
+                if alt.exists():
+                    # Load only essential columns for faster startup
+                    self.df = pd.read_csv(alt, usecols=[
+                        'productDisplayName', 'articleType', 'baseColour', 
+                        'usage', 'gender', 'filename', 'link'
+                    ])
+                else:
+                    self.df = pd.DataFrame()
+            else:
+                # Load only essential columns for faster startup
+                self.df = pd.read_csv(DATA_PATH, usecols=[
+                    'productDisplayName', 'articleType', 'baseColour', 
+                    'usage', 'gender', 'filename', 'link'
+                ])
+        return self.df
 
     def _build_matrix(self):
         df = self._load_df()
@@ -138,51 +101,7 @@ class _SearchEngine:
         if self.vectorizer is None or self.matrix is None:
             self._build_matrix()
 
-    def suggest_mongodb(self, query: str, top_n: int = 5) -> Dict[str, List[Suggestion]]:
-        """Search using MongoDB's native text search capabilities"""
-        if self.mongodb_manager is None:
-            return {"exact_matches": [], "other_recommendations": []}
-        
-        try:
-            # Use MongoDB's text search
-            products = self.mongodb_manager.search_products(query, limit=top_n * 2)
-            
-            exact_matches: List[Suggestion] = []
-            other_recommendations: List[Suggestion] = []
-            
-            for i, product in enumerate(products):
-                suggestion = Suggestion(
-                    index=i,
-                    productDisplayName=product.get('productDisplayName', ''),
-                    articleType=product.get('articleType', ''),
-                    usage=product.get('usage', ''),
-                    baseColour=product.get('baseColour', ''),
-                    gender=product.get('gender', ''),
-                    score=0.9 - (i * 0.1),  # Decreasing score
-                    filename=product.get('filename', ''),
-                    link=product.get('link', ''),
-                    match_type="exact" if i < top_n else "related"
-                )
-                
-                if i < top_n:
-                    exact_matches.append(suggestion)
-                else:
-                    other_recommendations.append(suggestion)
-            
-            return {"exact_matches": exact_matches, "other_recommendations": other_recommendations}
-            
-        except Exception as e:
-            print(f"❌ MongoDB search error: {e}")
-            return {"exact_matches": [], "other_recommendations": []}
-
     def suggest(self, query: str, top_n: int = 5) -> Dict[str, List[Suggestion]]:
-        # Try MongoDB search first
-        if self.mongodb_manager is not None:
-            mongodb_results = self.suggest_mongodb(query, top_n)
-            if mongodb_results["exact_matches"] or mongodb_results["other_recommendations"]:
-                return mongodb_results
-        
-        # Fallback to original TF-IDF search
         self.ensure_ready()
         if self.matrix is None or self.matrix.shape[0] == 0:
             return {"exact_matches": [], "other_recommendations": []}
@@ -447,12 +366,7 @@ def verify_api_key(x_api_key: str | None = Header(default=None)):
 
 @app.get("/api/health")
 def health():
-    return {
-        "status": "ok",
-        "model": "Product Categorization AI",
-        "mongodb_connected": engine.mongodb_manager is not None and engine.mongodb_manager.client is not None,
-        "timestamp": datetime.utcnow().isoformat()
-    }
+    return {"status": "ok"}
 
 
 @app.get("/api/search/suggest", response_model=SuggestResponse)
@@ -469,28 +383,13 @@ def suggest_products(q: str = Query(..., min_length=1), top_n: int = 5):
         total_results=total_results
     )
 
-# Mount agent routes - disabled for performance
-# app.include_router(agent_router, dependencies=[Depends(verify_api_key)])
+# Mount agent routes (package-relative)
+from .routes import router as agent_router
+app.include_router(agent_router, dependencies=[Depends(verify_api_key)])
 
 # ==================== RESPONSIBLE AI ENDPOINTS ====================
 
-try:
-    from backend.core.security import (
-        responsible_ai_manager,
-        enhanced_sanitize_input_with_ai_safety,
-        detect_and_mitigate_bias,
-        assess_data_privacy,
-        generate_ethical_ai_guidelines,
-        validate_ai_model_ethics,
-        create_responsible_ai_policy,
-        log_responsible_ai_event,
-        get_responsible_ai_dashboard_data,
-        BiasType,
-        PrivacyLevel,
-        AISafetyLevel
-    )
-except Exception:
-    from core.security import (
+from ..core.security import (
     responsible_ai_manager,
     enhanced_sanitize_input_with_ai_safety,
     detect_and_mitigate_bias,
@@ -687,89 +586,6 @@ def get_responsible_ai_report():
     except Exception as e:
         logger.error(f"Report generation error: {e}")
         return {"error": "Report generation failed", "details": str(e)}
-
-# ==================== MONGODB ENDPOINTS ====================
-
-@app.get("/api/mongodb/status")
-def get_mongodb_status():
-    """Get MongoDB connection status and database statistics"""
-    try:
-        from core.mongodb_connection import get_database_connection_status
-        status = get_database_connection_status()
-        return {
-            "status": "success",
-            "mongodb_status": status,
-            "message": "MongoDB connection status retrieved successfully"
-        }
-    except Exception as e:
-        logger.error(f"MongoDB status error: {e}")
-        return {"error": "MongoDB status retrieval failed", "details": str(e)}
-
-@app.get("/api/mongodb/stats")
-def get_mongodb_stats():
-    """Get MongoDB database statistics"""
-    try:
-        mongodb_manager = get_mongodb_manager()
-        if mongodb_manager.client is None:
-            if not mongodb_manager.connect():
-                return {"error": "Failed to connect to MongoDB"}
-        
-        stats = mongodb_manager.get_database_stats()
-        # Ensure categories count is computed even if older stats path returns 0
-        if isinstance(stats, dict) and stats.get("categories", 0) in (0, None):
-            try:
-                stats["categories"] = len(mongodb_manager.get_categories())
-            except Exception:
-                pass
-        return {
-            "status": "success",
-            "database_stats": stats,
-            "message": "MongoDB statistics retrieved successfully"
-        }
-    except Exception as e:
-        logger.error(f"MongoDB stats error: {e}")
-        return {"error": "MongoDB statistics retrieval failed", "details": str(e)}
-
-@app.get("/api/mongodb/search")
-def search_mongodb_products(q: str = Query(..., description="Search query"), limit: int = Query(10, description="Number of results")):
-    """Search products directly from MongoDB"""
-    try:
-        mongodb_manager = get_mongodb_manager()
-        if mongodb_manager.client is None:
-            if not mongodb_manager.connect():
-                return {"error": "Failed to connect to MongoDB"}
-        
-        # Use fast text search first; falls back internally if needed
-        products = mongodb_manager.search_products_fast(q, limit)
-        return {
-            "status": "success",
-            "query": q,
-            "results_count": len(products),
-            "products": products[:limit],
-            "message": f"Found {len(products)} products matching '{q}'"
-        }
-    except Exception as e:
-        logger.error(f"MongoDB search error: {e}")
-        return {"error": "MongoDB search failed", "details": str(e)}
-
-
-@app.post("/api/mongodb/products")
-def add_product_endpoint(req: NewProductRequest):
-    """Add a new product to MongoDB"""
-    try:
-        mongodb_manager = get_mongodb_manager()
-        if mongodb_manager.client is None:
-            if not mongodb_manager.connect():
-                raise HTTPException(status_code=500, detail="Failed to connect to MongoDB")
-        product_id = mongodb_manager.add_product(req.model_dump(exclude_none=True))
-        if not product_id:
-            raise HTTPException(status_code=500, detail="Failed to insert product")
-        return {"status": "success", "product_id": product_id}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Add product error: {e}")
-        return {"error": "Product insert failed", "details": str(e)}
 
 @app.post("/api/responsible-ai/sanitize")
 def sanitize_input_endpoint(request: BiasDetectionRequest):

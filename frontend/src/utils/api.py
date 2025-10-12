@@ -21,8 +21,6 @@ def generate_tags(product_data):
     resp = requests.post(f"{BASE_URL}/tagger/process", json=product_data)
     return resp.json()
 # src/utils/api.py
-
-from src.utils.api import classify_product, extract_attributes, generate_tags
 def process_product_description(description: str):
     """
     Runs attribute extraction, category classification, and tag generation 

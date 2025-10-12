@@ -5,6 +5,7 @@ from pathlib import Path
 from ..core.llm_integration import LLMIntegration
 from ..core.nlp_processor import NLPProcessor
 from ..core.information_retrieval import InformationRetrieval
+from ..core.fine_tuned_classifier import fine_tuned_classifier
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,13 @@ class CategoryClassifierAgent:
         
         # Initialize InformationRetrieval with product data
         self.ir = self._initialize_information_retrieval()
+        
+        # Try to load fine-tuned model
+        self.use_fine_tuned = fine_tuned_classifier.is_model_available()
+        if self.use_fine_tuned:
+            logger.info("Using fine-tuned model for classification")
+        else:
+            logger.info("Using pre-trained model for classification")
     
     def _initialize_information_retrieval(self):
         """Initialize InformationRetrieval with product data from CSV."""
@@ -45,6 +53,37 @@ class CategoryClassifierAgent:
             return InformationRetrieval()
     
     def classify_product(self, product_data: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            # Use fine-tuned model if available
+            if self.use_fine_tuned:
+                return self._classify_with_fine_tuned_model(product_data)
+            else:
+                return self._classify_with_pretrained_model(product_data)
+                
+        except Exception as e:
+            logger.error(f"Error in category classification: {e}")
+            return {"error": str(e), "category": "Unknown", "subcategory": "Unknown", "confidence": 0.0}
+    
+    def _classify_with_fine_tuned_model(self, product_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Classify using fine-tuned model"""
+        try:
+            result = fine_tuned_classifier.classify_product(product_data)
+            
+            # Ensure confidence is float
+            if 'confidence' in result:
+                try:
+                    result['confidence'] = float(result['confidence'])
+                except (ValueError, TypeError):
+                    result['confidence'] = 0.5
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in fine-tuned classification: {e}")
+            return self._classify_with_pretrained_model(product_data)
+    
+    def _classify_with_pretrained_model(self, product_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Classify using pre-trained model (original method)"""
         try:
             product_name = product_data.get('productDisplayName', '')
             product_description = product_data.get('description', '') or product_name
@@ -91,5 +130,5 @@ class CategoryClassifierAgent:
             return result
             
         except Exception as e:
-            logger.error(f"Error in category classification: {e}")
+            logger.error(f"Error in pre-trained classification: {e}")
             return {"error": str(e), "category": "Unknown", "subcategory": "Unknown", "confidence": 0.0}
