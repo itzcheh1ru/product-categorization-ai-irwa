@@ -17,7 +17,7 @@ class AttributeExtractorAgent:
             usage = product_data.get('usage', '')
             season = product_data.get('season', '')
             
-            # Prepare prompt for LLM
+            # prompt for LLM
             prompt = f"""
             Extract detailed attributes from the following product information:
             
@@ -182,3 +182,6 @@ class AttributeExtractorAgent:
                 }
         
         return validated
+        
+
+      
