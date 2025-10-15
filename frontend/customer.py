@@ -36,7 +36,7 @@ def display_products(df, category=None, subcategory=None, article_type=None, tag
         st.info("No products found with the selected criteria.")
         return
 
-    # Show in grid (3 per row)
+    # Show in grid 
     num_cols = 3
     for i in range(0, len(df), num_cols):
         cols = st.columns(num_cols)
@@ -56,14 +56,14 @@ def display_products(df, category=None, subcategory=None, article_type=None, tag
                 # Product title
                 st.markdown(f"**{prod.get('productDisplayName', 'Unnamed Product')}**")
 
-                # Price (mock price if missing)
+                # Price 
                 price = prod.get("price", None)
                 if price:
                     st.write(f"💰 LKR {price:,.2f}")
                 else:
                     st.write("💰 Price on request")
 
-                 # Tags (inside grid card)
+                 # Tags 
                 if 'tags' in prod and isinstance(prod['tags'], list) and len(prod['tags']) > 0:
                     for i, t in enumerate(prod['tags']):
                         key = f"tag_{prod['id']}_{i}"
