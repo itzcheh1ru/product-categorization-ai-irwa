@@ -207,7 +207,7 @@ def admin_add_product_page():
                             all_text += ' ' + ' '.join(entities).lower()
                         
                         # Extract gender - improved logic with word boundaries
-                        gender = 'Unisex'  # Default to Unisex instead of empty string
+                        gender = 'Unisex' 
                         
                         # Check for men indicators
                         men_words = ['men', 'male', 'man', 'mens', 'guy', 'boys', 'boy', 'men\'s', 'mens\'', 'guys\'', 'boys\'']
@@ -222,7 +222,7 @@ def admin_add_product_page():
                         elif women_count > men_count:
                             gender = 'Women'
                         elif men_count > 0 and women_count > 0:
-                            gender = 'Unisex'  # Both mentioned
+                            gender = 'Unisex'  
                         else:
                             # Check product name as well
                             name_men_count = sum(1 for word in men_words if re.search(r'\b' + re.escape(word) + r'\b', name_lower))
@@ -233,7 +233,7 @@ def admin_add_product_page():
                             elif name_women_count > name_men_count:
                                 gender = 'Women'
                             else:
-                                gender = 'Unisex'  # Default to Unisex when unclear
+                                gender = 'Unisex'  
                         
                         # Extract color
                         colors = ['black', 'white', 'blue', 'red', 'green', 'yellow', 'pink', 'purple', 'brown', 'gray', 'grey', 'orange', 'navy', 'beige', 'tan', 'silver', 'gold']
@@ -292,7 +292,7 @@ def admin_add_product_page():
                         elif any(word in all_text for word in ['party', 'evening', 'night']):
                             usage = 'Party'
                         else:
-                            usage = 'Casual'  # Default
+                            usage = 'Casual'  
                         
                         # Extract season
                         if any(word in all_text for word in ['summer', 'hot', 'warm']):
