@@ -338,7 +338,7 @@ def admin_add_product_page():
                         "articleType": ai_article_type if ai_article_type and ai_article_type != 'Unknown' else fallback['article_type'],
                         "baseColour": ai_color if ai_color and ai_color != 'Unknown' else fallback['color'],
                         "season": extract_value(attributes, 'season') if extract_value(attributes, 'season') != 'Unknown' else fallback['season'],
-                        "year": extract_value(attributes, 'year') or 2024,
+                        "year": extract_value(attributes, 'year') or 2025,
                         "usage": ai_usage if ai_usage and ai_usage != 'Unknown' else fallback['usage'],
                         "link": image_url if image_url else '',
                         "filename": f"{product_name.replace(' ', '_').lower()}.jpg" if not image_url else ""
