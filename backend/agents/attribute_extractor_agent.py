@@ -22,30 +22,19 @@ class AttributeExtractorAgent:
             Extract detailed attributes from the following product information:
             
             Product: {product_name}
-
             Base Color: {base_color}
-
             Usage: {usage}
-
             Season: {season}
-
             Category: {category if category else 'Not specified'}
             
             Extract the following attributes:
             - color: primary color(s)
-
             - material: fabric or material composition
-
             - size: size information if available
-
             - pattern: pattern or design
-
             - style: fashion or product style
-
             - gender: intended gender if specified
-
             - seasonality: appropriate seasons
-
             - occasion: suitable occasions
             
             Respond with a JSON object containing these attributes.
@@ -54,19 +43,12 @@ class AttributeExtractorAgent:
             
             response_format = {
                 "color": {"value": "string", "confidence": "float"},
-
                 "material": {"value": "string", "confidence": "float"},
-
                 "size": {"value": "string", "confidence": "float"},
-
                 "pattern": {"value": "string", "confidence": "float"},
-
                 "style": {"value": "string", "confidence": "float"},
-
                 "gender": {"value": "string", "confidence": "float"},
-
                 "seasonality": {"value": "string", "confidence": "float"},
-                
                 "occasion": {"value": "string", "confidence": "float"}
             }
             
@@ -191,6 +173,7 @@ class AttributeExtractorAgent:
                     "value": value,
                     "confidence": confidence
                 }
+                
             else:
                 # Handle simple string values
                 value = str(attr_data).strip() if attr_data else "Unknown"
