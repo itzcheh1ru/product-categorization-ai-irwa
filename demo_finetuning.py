@@ -16,7 +16,7 @@ def demo_data_preparation():
     print("-" * 40)
     
     try:
-        from backend.core.training_data_preparation import TrainingDataPreparation
+        from backend.data_finetuned.training_data_preparation import TrainingDataPreparation
         
         # Initialize data preparation
         data_prep = TrainingDataPreparation()
@@ -58,14 +58,14 @@ def demo_fine_tuning_setup():
     print("-" * 40)
     
     try:
-        from backend.core.fine_tuning import FineTuningManager
+        from backend.data_finetuned.fine_tuning import FineTuningManager
         
         # Initialize fine-tuning manager
         manager = FineTuningManager()
         print("✅ Fine-tuning manager initialized")
         
         # Show configuration
-        from backend.core.training_data_preparation import TrainingDataPreparation
+        from backend.data_finetuned.training_data_preparation import TrainingDataPreparation
         data_prep = TrainingDataPreparation()
         config = data_prep.create_training_config()
         
@@ -87,7 +87,7 @@ def demo_model_integration():
     print("-" * 40)
     
     try:
-        from backend.core.fine_tuned_classifier import fine_tuned_classifier
+        from backend.data_finetuned.fine_tuned_classifier import fine_tuned_classifier
         
         # Check model availability
         if fine_tuned_classifier.is_model_available():

@@ -5,7 +5,7 @@ from pathlib import Path
 from ..core.llm_integration import LLMIntegration
 from ..core.nlp_processor import NLPProcessor
 from ..core.information_retrieval import InformationRetrieval
-from ..core.fine_tuned_classifier import fine_tuned_classifier
+from ..data_finetuned.fine_tuned_classifier import fine_tuned_classifier
 
 logger = logging.getLogger(__name__)
 

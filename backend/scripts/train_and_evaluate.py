@@ -12,9 +12,9 @@ from pathlib import Path
 # Add backend to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from core.training_data_preparation import TrainingDataPreparation
-from core.fine_tuning import FineTuningManager
-from core.model_evaluation import ModelEvaluator
+from backend.data_finetuned.training_data_preparation import TrainingDataPreparation
+from backend.data_finetuned.fine_tuning import FineTuningManager
+from backend.data_finetuned.model_evaluation import ModelEvaluator
 
 # Setup logging
 logging.basicConfig(
