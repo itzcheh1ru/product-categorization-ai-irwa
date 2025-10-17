@@ -28,8 +28,7 @@ if __name__ == "__main__":
     streamlit_url = "http://localhost:8501"
     print(f"✅ Backend running on http://127.0.0.1:8000 | Frontend running on {streamlit_url}")
 
-    # 🌐 Open Streamlit automatically
-    webbrowser.open_new_tab(streamlit_url)
+  
 
     try:
         backend.wait()
