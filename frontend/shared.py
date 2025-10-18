@@ -33,6 +33,7 @@ def call_api(endpoint, data=None, method="POST"):
         st.error(f"Connection error: {str(e)}")
         return None
 
+@st.cache_data(ttl=300)  # Cache for 5 minutes
 def load_product_data():
     """Load product data from CSV file with the correct structure"""
     try:
@@ -44,7 +45,15 @@ def load_product_data():
                 break
 
         if data_path and os.path.exists(data_path):
-            df = pd.read_csv(data_path)
+            # Load only essential columns to speed up processing
+            essential_columns = ['id', 'gender', 'masterCategory', 'subCategory', 'articleType', 
+                               'baseColour', 'season', 'year', 'usage', 'productDisplayName', 
+                               'filename', 'link']
+            
+            df = pd.read_csv(data_path, usecols=lambda x: x in essential_columns)
+            
+            # Load all products (removed the 1000 row limit)
+            # df = df.head(1000)  # Commented out to load all products
             
             # Create tags from available attributes for better discovery
             df['tags'] = df.apply(lambda row: [
@@ -61,7 +70,6 @@ def load_product_data():
             # Clean up tags - remove empty values and flatten
             df['tags'] = df['tags'].apply(lambda x: [tag for tag in x if tag and str(tag).strip() != ''])
             
-            st.session_state.admin_data = df
             return df
         else:
             st.warning("Product data file not found locally. Using sample data.")

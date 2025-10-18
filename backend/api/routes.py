@@ -3,12 +3,12 @@ from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from ..agents.category_classifier_agent import CategoryClassifierAgent  # type: ignore
-from ..agents.attribute_extractor_agent import AttributeExtractorAgent  # type: ignore
-from ..agents.tag_generator_agent import TagGeneratorAgent
-from ..agents.orchestrator_agent import OrchestratorAgent
-from ..core.security import sanitize_input
-from ..core.mongodb_service import mongodb_service
+from agents.category_classifier_agent import CategoryClassifierAgent  # type: ignore
+from agents.attribute_extractor_agent import AttributeExtractorAgent  # type: ignore
+from agents.tag_generator_agent import TagGeneratorAgent
+from agents.orchestrator_agent import OrchestratorAgent
+from core.security import sanitize_input
+from core.mongodb_service import mongodb_service
 
 
 router = APIRouter(prefix="/api", tags=["agents"])

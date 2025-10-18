@@ -131,16 +131,23 @@ class _SearchEngine:
             # Check if this is an exact match
             is_exact_match = self._is_exact_match(row, colors, product_types)
             
+            # Helper function to handle NaN values
+            def safe_get(row, key, default=None):
+                if hasattr(row, "get"):
+                    value = row.get(key)
+                    return value if pd.notna(value) else default
+                return default
+            
             suggestion = Suggestion(
                 index=int(i),
-                productDisplayName=(row.get("productDisplayName") if hasattr(row, "get") else None),
-                articleType=(row.get("articleType") if hasattr(row, "get") else None),
-                usage=(row.get("usage") if hasattr(row, "get") else None),
-                baseColour=(row.get("baseColour") if hasattr(row, "get") else None),
-                gender=(row.get("gender") if hasattr(row, "get") else None),
+                productDisplayName=safe_get(row, "productDisplayName"),
+                articleType=safe_get(row, "articleType"),
+                usage=safe_get(row, "usage"),
+                baseColour=safe_get(row, "baseColour"),
+                gender=safe_get(row, "gender"),
                 score=float(sims[i]),
-                filename=(row.get("filename") if hasattr(row, "get") else None),
-                link=(row.get("link") if hasattr(row, "get") else None),
+                filename=safe_get(row, "filename"),
+                link=safe_get(row, "link"),
                 match_type="exact" if is_exact_match else "related"
             )
             
@@ -389,7 +396,7 @@ app.include_router(agent_router, dependencies=[Depends(verify_api_key)])
 
 # ==================== RESPONSIBLE AI ENDPOINTS ====================
 
-from ..core.security import (
+from core.security import (
     responsible_ai_manager,
     enhanced_sanitize_input_with_ai_safety,
     detect_and_mitigate_bias,

@@ -1,7 +1,7 @@
 from typing import Dict, Any, List
 import logging
-from ..core.llm_integration import LLMIntegration
-from ..core.nlp_processor import NLPProcessor
+from core.llm_integration import LLMIntegration
+from core.nlp_processor import NLPProcessor
 
 logger = logging.getLogger(__name__)
 

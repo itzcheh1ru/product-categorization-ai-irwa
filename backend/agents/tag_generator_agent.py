@@ -5,6 +5,7 @@ import logging
 import re
 import json
 from datetime import datetime
+from core.llm_integration import LLMIntegration
 
 logger = logging.getLogger(__name__)
 

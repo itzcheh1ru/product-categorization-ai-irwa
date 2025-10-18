@@ -195,11 +195,11 @@ def customer_ai_search_page():
                             # Display image
                             if link and isinstance(link, str) and link.strip():
                                 try:
-                                    st.image(link, use_container_width=True)
+                                    st.image(link, use_column_width=True)
                                 except Exception:
-                                    st.image("https://via.placeholder.com/200x250?text=Product+Image", use_container_width=True)
+                                    st.image("https://via.placeholder.com/200x250?text=Product+Image", use_column_width=True)
                             else:
-                                st.image("https://via.placeholder.com/200x250?text=No+Image", use_container_width=True)
+                                st.image("https://via.placeholder.com/200x250?text=No+Image", use_column_width=True)
                         
                         with col2:
                             st.markdown(f"**{name}**")
@@ -231,11 +231,11 @@ def customer_ai_search_page():
                             # Display image
                             if link and isinstance(link, str) and link.strip():
                                 try:
-                                    st.image(link, use_container_width=True)
+                                    st.image(link, use_column_width=True)
                                 except Exception:
-                                    st.image("https://via.placeholder.com/200x250?text=Product+Image", use_container_width=True)
+                                    st.image("https://via.placeholder.com/200x250?text=Product+Image", use_column_width=True)
                             else:
-                                st.image("https://via.placeholder.com/200x250?text=No+Image", use_container_width=True)
+                                st.image("https://via.placeholder.com/200x250?text=No+Image", use_column_width=True)
                         
                         with col2:
                             st.markdown(f"**{name}**")
@@ -255,7 +255,10 @@ def customer_browse_page():
     """Customer Browse by Category page (shop-style grid)"""
     st.title("🛍 Browse by Category")
 
-    df = load_product_data()
+    # Show loading indicator
+    with st.spinner("Loading products..."):
+        df = load_product_data()
+    
     if df is None or df.empty:
         st.info("No products available.")
         return
@@ -287,10 +290,32 @@ def customer_browse_page():
         st.info("No products found.")
         return
 
+    # Add pagination
+    products_per_page = 12
+    total_pages = (len(df) - 1) // products_per_page + 1
+    
+    if 'browse_page' not in st.session_state:
+        st.session_state.browse_page = 1
+    
+    # Page selector
+    if total_pages > 1:
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            page = st.selectbox(f"Page (1-{total_pages})", range(1, total_pages + 1), 
+                              index=st.session_state.browse_page - 1, key="page_selector")
+            st.session_state.browse_page = page
+    
+    # Get products for current page
+    start_idx = (st.session_state.browse_page - 1) * products_per_page
+    end_idx = start_idx + products_per_page
+    page_df = df.iloc[start_idx:end_idx]
+    
+    st.info(f"Showing {len(page_df)} of {len(df)} products (Page {st.session_state.browse_page}/{total_pages})")
+
     num_cols = 3
-    for i in range(0, len(df), num_cols):
+    for i in range(0, len(page_df), num_cols):
         cols = st.columns(num_cols)
-        for j, product in enumerate(df.iloc[i:i+num_cols].iterrows()):
+        for j, product in enumerate(page_df.iloc[i:i+num_cols].iterrows()):
             _, prod = product
             with cols[j]:
                 # Product image
@@ -455,10 +480,10 @@ def customer_product_detail_page():
     with col2:
         # Display product image if available
         if 'link' in product and pd.notna(product['link']):
-            st.image(product['link'], use_container_width=True, caption="Product Image")
+            st.image(product['link'], use_column_width=True, caption="Product Image")
         elif 'filename' in product and pd.notna(product['filename']):
             st.image(f"https://via.placeholder.com/300x400?text=Product+Image", 
-                    use_container_width=True, caption="Image not available")
+                    use_column_width=True, caption="Image not available")
         
         st.subheader("Actions")
         if st.button("Add to Cart", type="primary"):

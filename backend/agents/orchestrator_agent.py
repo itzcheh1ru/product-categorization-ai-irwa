@@ -1,8 +1,9 @@
 from typing import Dict, Any
 
-from .category_classifier_agent import CategoryClassifierAgent  # type: ignore
-from .attribute_extractor_agent import AttributeExtractorAgent  # type: ignore
-from .tag_generator_agent import TagGeneratorAgent
+from agents.category_classifier_agent import CategoryClassifierAgent  # type: ignore
+from agents.attribute_extractor_agent import AttributeExtractorAgent  # type: ignore
+from agents.tag_generator_agent import TagGeneratorAgent
+from core.llm_integration import LLMIntegration
 
 
 class OrchestratorAgent:
